@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'io.freefair.lombok' version '8.4'
+}
+
+group = 'org.navneev'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    
+    implementation 'io.jhdf:jhdf:0.6.10'
+    
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(23)
+    }
+}
+
+compileJava {
+    options.compilerArgs += ['--add-modules', 'jdk.incubator.vector', '--enable-preview']
+}
+
+compileTestJava {
+    options.compilerArgs += ['--add-modules', 'jdk.incubator.vector', '--enable-preview']
+}
+
+test {
+    useJUnitPlatform()
+    jvmArgs '--add-modules', 'jdk.incubator.vector', '--enable-preview'
+}
+
+application {
+    mainClass = 'org.navneev.Main'
+}
+
+run {
+    jvmArgs '--add-modules', 'jdk.incubator.vector', '--enable-preview'
+}
