@@ -36,8 +36,8 @@ src/
 
 Main implementation of the HNSW algorithm:
 
-- `addNode()` - Inserts new vectors into the graph
-- `search()` - Performs k-NN search
+- `addNode(float[] vector)` - Inserts new vectors into the graph
+- `search(float[] query, int k, int efSearch)` - Performs k-NN search
 - `searchLayer()` - Layer-specific search algorithm
 - `selectNeighborsHeuristic()` - Connection pruning
 
@@ -45,6 +45,38 @@ Main implementation of the HNSW algorithm:
 ```java
 private int M = 16;              // Max connections per node
 private int efConstruction = 100; // Construction search width
+```
+
+### VectorStorage (Abstract)
+
+Base class for vector storage strategies:
+
+- `addVector(int id, float[] vector)` - Store vector with ID
+- `getVector(int id)` - Retrieve vector by ID
+
+**Implementations:**
+
+#### OnHeapVectorStorage
+- Uses HashMap for storage
+- Automatic memory management
+- Best for datasets < 1M vectors
+- Simple implementation
+
+```java
+VectorStorage storage = new OnHeapVectorStorage(dimensions, capacity);
+```
+
+#### OffHeapVectorsStorage
+- Uses direct ByteBuffer
+- Reduced GC pressure
+- Better cache locality
+- Requires explicit cleanup
+- Best for datasets > 1M vectors
+
+```java
+OffHeapVectorsStorage storage = new OffHeapVectorsStorage(dimensions, capacity);
+// ... use storage ...
+storage.cleanup(); // Important: free memory
 ```
 
 ### HNSWNode.java
@@ -190,6 +222,38 @@ int[][] groundTruth = HDF5Reader.readGroundTruths("dataset.h5", "neighbors");
 
 ## Performance Optimization
 
+### Vector Storage Selection
+
+**Choose On-Heap when:**
+- Dataset < 1M vectors
+- Simplicity is priority
+- GC pauses are acceptable
+- Development/testing
+
+**Choose Off-Heap when:**
+- Dataset > 1M vectors
+- Low GC pressure required
+- Memory efficiency critical
+- Production deployments
+
+### Memory Management
+
+**On-Heap:**
+```java
+VectorStorage storage = new OnHeapVectorStorage(128, 1000000);
+// Automatic cleanup via GC
+```
+
+**Off-Heap:**
+```java
+OffHeapVectorsStorage storage = new OffHeapVectorsStorage(128, 1000000);
+try {
+    // Use storage
+} finally {
+    storage.cleanup(); // Explicit cleanup required
+}
+```
+
 ### Memory Management
 
 - Use primitive arrays instead of wrapper classes
@@ -207,6 +271,7 @@ int[][] groundTruth = HDF5Reader.readGroundTruths("dataset.h5", "neighbors");
 - Batch node insertions when possible
 - Use efficient data structures (BitSet for visited)
 - Minimize priority queue operations
+- Choose appropriate vector storage for dataset size
 
 ## Build Configuration
 

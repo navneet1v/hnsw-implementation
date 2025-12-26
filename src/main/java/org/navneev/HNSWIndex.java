@@ -61,6 +61,9 @@ import java.util.*;
  * @see <a href="https://arxiv.org/abs/1603.09320">HNSW Paper</a>
  */
 public class HNSWIndex {
+
+    private static final int DEFAULT_EF_CONSTRUCTION = 100;
+
     /** Map of node IDs to HNSWNode objects for fast node lookup */
     private final Map<Integer, HNSWNode> nodesById = new HashMap<>();
 
@@ -68,7 +71,7 @@ public class HNSWIndex {
     private final int M = 16;
 
     /** Search width during construction (efConstruction parameter) */
-    private final int efConstruction = 100;
+    private final int efConstruction;
 
     /** Random number generator for level assignment */
     private final Random random;
@@ -77,7 +80,7 @@ public class HNSWIndex {
     private Integer entryPoint = null;
 
     /** Map of node IDs to their vector data for distance calculations */
-    private final Map<Integer, float[]> idToVectorMap = new HashMap<>();
+    private final VectorStorage idToVectorStorage;
 
     /** Current maximum level in the graph */
     private int maxLevel = -1;
@@ -92,7 +95,13 @@ public class HNSWIndex {
      *   <li>Random seed for reproducible level assignment</li>
      * </ul>
      */
-    public HNSWIndex() {
+    public HNSWIndex(int dimensions, int totalNumberOfVectors) {
+        this(DEFAULT_EF_CONSTRUCTION, dimensions, totalNumberOfVectors);
+    }
+
+    public HNSWIndex(int efConstruction, int dimensions, int totalNumberOfVectors) {
+        this.efConstruction = efConstruction;
+        this.idToVectorStorage = new OffHeapVectorsStorage(dimensions, totalNumberOfVectors);
         random = new Random();
     }
 
@@ -146,7 +155,7 @@ public class HNSWIndex {
         int nodeId = nodesById.size();
         HNSWNode newNode = new HNSWNode(nodeId, level);
         nodesById.put(nodeId, newNode);
-        idToVectorMap.put(nodeId, vector);
+        idToVectorStorage.addVector(nodeId, vector);
 
         if (entryPoint == null) {
             entryPoint = nodeId;
@@ -208,7 +217,7 @@ public class HNSWIndex {
                 Comparator.comparingDouble(IdAndDistance::distance)
         );
 
-        final BitSet visited = new BitSet(idToVectorMap.size());
+        final BitSet visited = new BitSet(idToVectorStorage.getTotalNumberOfVectors());
         final float entryPointDistance = dis(entry, query);
 
         candidates.add(new IdAndDistance(entry, entryPointDistance));
@@ -299,7 +308,7 @@ public class HNSWIndex {
      * @return squared Euclidean distance between the nodes
      */
     private float dis(int a, int b) {
-        return VectorUtils.euclideanDistance(idToVectorMap.get(a), idToVectorMap.get(b));
+        return VectorUtils.euclideanDistance(idToVectorStorage.getVector(a), idToVectorStorage.getVector(b));
     }
 
     /**
@@ -310,7 +319,7 @@ public class HNSWIndex {
      * @return squared Euclidean distance
      */
     private float dis(int id, float[] q) {
-        return VectorUtils.euclideanDistance(idToVectorMap.get(id), q);
+            return VectorUtils.euclideanDistance(idToVectorStorage.getVector(id), q);
     }
 
     /**

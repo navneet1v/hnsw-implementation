@@ -15,6 +15,7 @@ This project implements the HNSW algorithm as described in the paper "Efficient 
 
 - ✅ Multi-layer graph structure with probabilistic level assignment
 - ✅ SIMD-accelerated Euclidean distance calculations
+- ✅ Pluggable vector storage (on-heap and off-heap options)
 - ✅ HDF5 file reading for datasets (SIFT, GIST, etc.)
 - ✅ Configurable parameters (M, efConstruction, efSearch)
 - ✅ Recall evaluation against ground truth
@@ -63,7 +64,12 @@ tar -xzf sift.tar.gz
 ## Basic Usage
 
 ```java
+// Create index with default on-heap storage
 HNSWIndex index = new HNSWIndex();
+
+// Or use off-heap storage for large datasets
+// VectorStorage storage = new OffHeapVectorsStorage(dimensions, capacity);
+// HNSWIndex index = new HNSWIndex(storage);
 
 // Add vectors
 float[] vector1 = {1.0f, 2.0f, 3.0f};
@@ -71,9 +77,30 @@ float[] vector2 = {4.0f, 5.0f, 6.0f};
 index.addNode(vector1);
 index.addNode(vector2);
 
-// Search
+// Search for k nearest neighbors
 float[] query = {1.1f, 2.1f, 3.1f};
 int[] results = index.search(query, k=5, efSearch=50);
+```
+
+## Vector Storage Options
+
+### On-Heap Storage (Default)
+- Uses HashMap for vector storage
+- Automatic memory management
+- Best for small to medium datasets
+
+### Off-Heap Storage
+- Uses direct ByteBuffer
+- Reduced GC pressure
+- Better for large datasets (>1M vectors)
+- Requires explicit cleanup
+
+```java
+// Off-heap storage example
+OffHeapVectorsStorage storage = new OffHeapVectorsStorage(128, 1000000);
+HNSWIndex index = new HNSWIndex(storage);
+// ... use index ...
+storage.cleanup(); // Explicit memory cleanup
 ```
 
 ## Performance

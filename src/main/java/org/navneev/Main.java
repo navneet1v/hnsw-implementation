@@ -187,7 +187,7 @@ public class Main {
         float[][] vectors = HDF5Reader.readVectors(hdf5FilePath, "train");
         System.out.println("\nLoaded " + vectors.length + " vectors with dimension " + vectors[0].length);
 
-        HNSWIndex index = new HNSWIndex();
+        final HNSWIndex index = new HNSWIndex(vectors[0].length, vectors.length);
 
         int numVectors = vectors.length;
         System.out.println("Adding " + numVectors + " vectors to HNSW index...");

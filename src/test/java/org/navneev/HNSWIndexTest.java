@@ -11,13 +11,9 @@ class HNSWIndexTest {
     private HNSWIndex index;
     private static final double DELTA = 1e-6;
 
-    @BeforeEach
-    void setUp() {
-        index = new HNSWIndex();
-    }
-
     @Test
     void testAddSingleNode() {
+        index = new HNSWIndex(3, 1);
         float[] vector = {1.0f, 2.0f, 3.0f};
         index.addNode(vector);
         
@@ -34,6 +30,8 @@ class HNSWIndexTest {
             {2.0f, 0.0f},
             {0.0f, 2.0f}
         };
+
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         
         for (float[] vector : vectors) {
             index.addNode(vector);
@@ -53,6 +51,7 @@ class HNSWIndexTest {
             {0.0f, 1.0f},  // up
             {3.0f, 4.0f}   // far point
         };
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         
         for (float[] vector : vectors) {
             index.addNode(vector);
@@ -77,7 +76,7 @@ class HNSWIndexTest {
             {4.0f, 4.0f},
             {5.0f, 5.0f}
         };
-        
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         for (float[] vector : vectors) {
             index.addNode(vector);
         }
@@ -109,6 +108,7 @@ class HNSWIndexTest {
             {1.0f, 1.0f},
             {2.0f, 1.0f}
         };
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         
         for (float[] vector : vectors) {
             index.addNode(vector);
@@ -127,6 +127,7 @@ class HNSWIndexTest {
     void testLargerDataset() {
         // Add 50 random vectors
         float[][] vectors = new float[50][2];
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         for (int i = 0; i < 50; i++) {
             vectors[i][0] = (float) (Math.random() * 10);
             vectors[i][1] = (float) (Math.random() * 10);
@@ -154,6 +155,7 @@ class HNSWIndexTest {
             {0.0f, 1.0f},
             {1.0f, 1.0f}
         };
+        index = new HNSWIndex(vectors[0].length, vectors.length);
         
         for (float[] vector : vectors) {
             index.addNode(vector);
@@ -180,6 +182,8 @@ class HNSWIndexTest {
     @Test
     void testIdenticalVectors() {
         float[] vector = {1.0f, 2.0f, 3.0f};
+
+        index = new HNSWIndex(vector.length, 1);
         
         // Add the same vector multiple times
         for (int i = 0; i < 3; i++) {
@@ -204,6 +208,8 @@ class HNSWIndexTest {
         
         // Generate vectors
         float[][] vectors = generateUniqueVectors(NUM_VECTORS, DIMENSIONS);
+
+        index = new HNSWIndex(DIMENSIONS, NUM_VECTORS);
         
         // Build index
         System.out.println("Building index with " + NUM_VECTORS + " vectors...");
