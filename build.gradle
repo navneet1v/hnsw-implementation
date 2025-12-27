@@ -47,5 +47,8 @@ application {
 }
 
 run {
-    jvmArgs '--add-modules', 'jdk.incubator.vector', '--enable-preview'
+    def xms = System.getProperty('xms', '4g')
+    def xmx = System.getProperty('xmx', '4g')
+    jvmArgs '--add-modules', 'jdk.incubator.vector', '--enable-preview', "-Xms${xms}", "-Xmx${xmx}"
+    systemProperties = System.properties
 }

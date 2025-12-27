@@ -39,12 +39,12 @@ public class HNSWNode {
      * @param id unique identifier for this node
      * @param level highest level this node will exist in (must be >= 0)
      */
-    public HNSWNode(int id, int level) {
+    public HNSWNode(int id, int level, int maxNeighbors) {
         this.id = id;
         this.level = level;
         this.neighborsByLayer = new HashMap<>();
         for (int l = 0; l <= level; l++) {
-            neighborsByLayer.put(l, new ArrayList<>());
+            neighborsByLayer.put(l, new ArrayList<>(maxNeighbors));
         }
     }
 
@@ -72,7 +72,7 @@ public class HNSWNode {
      * @param neighbor the ID of the neighbor node to connect to
      * @throws IllegalArgumentException if the layer is invalid for this node
      */
-    public void addNeighbor(int layer, Integer neighbor) {
+    public void addNeighbor(int layer, int neighbor) {
         neighborsByLayer.get(layer).add(neighbor);
     }
 }

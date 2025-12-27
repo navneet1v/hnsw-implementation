@@ -41,24 +41,53 @@ cd hnsw-implementation
 ./gradlew run
 ```
 
-### 3. Run with HDF5 Dataset
+### 3. Run with Custom Configuration
+```bash
+# Configure memory (defaults: Xms=512m, Xmx=2g)
+./gradlew run -Dxms=1g -Dxmx=4g
+
+# Configure vector storage (ON_HEAP or OFF_HEAP)
+./gradlew run -Dvector.storage=OFF_HEAP
+
+# Pass custom system properties
+./gradlew run -Dfile.path=/path/to/data.h5 -Ddataset.name=train
+
+# Combine multiple parameters
+./gradlew run -Dxms=2g -Dxmx=8g -Dvector.storage=OFF_HEAP
+```
+
+### 4. Run with HDF5 Dataset
 ```bash
 # Download SIFT dataset (example)
 wget http://corpus-texmex.irisa.fr/sift.tar.gz
 tar -xzf sift.tar.gz
 
-# Update file path in Main.java
-# Then run:
-./gradlew run
+# Run with dataset path
+./gradlew run -Dfile.path=sift/sift_base.hdf5
 ```
 
-### 4. Run Tests
+### 5. Run Tests
 ```bash
 # Run all tests
 ./gradlew test
 
 # Run specific tests
 ./gradlew test --tests HNSWIndexTest
+```
+
+## Configuration Parameters
+
+### Gradle Runtime Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `-Dxms` | 4g      | Initial heap size |
+| `-Dxmx` | 4g      | Maximum heap size |
+| `-Dvector.storage` | OFF_HEAP | Vector storage type (ON_HEAP or OFF_HEAP) |
+
+**Example:**
+```bash
+./gradlew run -Dxms=1g -Dxmx=4g -Dvector.storage=OFF_HEAP
 ```
 
 ## Basic Usage
@@ -104,10 +133,10 @@ storage.cleanup(); // Explicit memory cleanup
 ```
 
 ## Performance
-
-- **Build time**: ~1-2 seconds per 100K vectors
-- **Search time**: <1ms per query (P50)
-- **Recall@10**: >80% with proper parameters
+All performance tests are done on sift 128D dataset
+- **Build time**: ~18mins for 1M 128D dataset
+- **Search time**: ~2ms per query (P99)
+- **Recall@10**: >92% with efs as 100, 100 and M = 16
 
 ## Documentation
 

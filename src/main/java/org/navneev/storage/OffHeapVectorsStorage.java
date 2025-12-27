@@ -1,4 +1,5 @@
-package org.navneev;
+package org.navneev.storage;
+
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 
@@ -66,43 +67,35 @@ public class OffHeapVectorsStorage extends VectorStorage {
      */
     public OffHeapVectorsStorage(int dimensions, int totalNumberOfVectors) {
         super(dimensions, totalNumberOfVectors);
-        // Allocate direct (off-heap) buffer
         int sizeInBytes = totalNumberOfVectors * dimensions * Float.BYTES;
         this.byteBuffer = ByteBuffer.allocateDirect(sizeInBytes);
         this.floatBuffer = byteBuffer.asFloatBuffer();
     }
 
     /**
-     * Adds a vector to the off-heap storage at the next available position.
+     * Adds a vector to the off-heap storage at the specified ID.
      * 
-     * <p>The vector is copied into the direct buffer at the current write offset.
-     * The write offset is automatically incremented after the operation.
+     * <p>The vector is copied into the direct buffer at position: id × dimensions.
+     * Bounds checking is performed by the parent class.
      * 
-     * <p><b>Thread Safety:</b> This method is not thread-safe. External synchronization
-     * is required if multiple threads add vectors concurrently.
-     * 
+     * @param id the vector ID (guaranteed to be in bounds by parent class)
      * @param vector the vector data to store (must have length equal to dimensions)
-     * @throws IllegalArgumentException if vector length doesn't match dimensions
-     * @throws IndexOutOfBoundsException if storage capacity is exceeded
      */
-    public void addVector(int id, float[] vector) {
-        floatBuffer.put((id * dimensions), vector, 0, dimensions);
+    public void addVectorImpl(int id, float[] vector) {
+        floatBuffer.put(id * dimensions, vector, 0, dimensions);
     }
 
     /**
      * Retrieves a vector from the off-heap storage by its ID.
      * 
      * <p>The vector is read from the buffer at position: id × dimensions.
-     * This method reuses an internal array to avoid allocations on repeated calls.
+     * A new array is allocated for each call to ensure thread safety.
+     * Bounds checking is performed by the parent class.
      * 
-     * <p><b>Warning:</b> The returned array is reused across calls. If you need to
-     * retain the data, make a copy before the next call to this method.
-     * 
-     * @param id the zero-based index of the vector to retrieve
-     * @return array containing the vector data (reused across calls)
-     * @throws IndexOutOfBoundsException if id is negative or >= totalNumberOfVectors
+     * @param id the zero-based index of the vector to retrieve (guaranteed to be in bounds)
+     * @return array containing the vector data (new array on each call)
      */
-    public float[] getVector(int id) {
+    public float[] getVectorImpl(int id, float[] vector) {
         floatBuffer.get(id * dimensions, vector);
         return vector;
     }

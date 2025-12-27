@@ -1,4 +1,4 @@
-package org.navneev;
+package org.navneev.storage;
 
 import lombok.Getter;
 
@@ -58,8 +58,7 @@ public abstract class VectorStorage {
     @Getter
     protected final int totalNumberOfVectors;
 
-    /** Reusable array for vector retrieval to avoid allocations */
-    protected final float[] vector;
+    private float[] vector;
 
     /**
      * Constructs a vector storage with specified dimensions and capacity.
@@ -84,44 +83,65 @@ public abstract class VectorStorage {
     /**
      * Adds a vector to the storage with the specified ID.
      * 
-     * <p>Implementations must handle:
-     * <ul>
-     *   <li>Validating vector dimensions match the storage dimensions</li>
-     *   <li>Storing the vector data (copy or reference as appropriate)</li>
-     *   <li>Handling duplicate IDs (replace or error)</li>
-     * </ul>
+     * <p>This method performs bounds checking before delegating to the implementation.
+     * Subclasses should implement {@link #addVectorImpl(int, float[])} for actual storage logic.
      * 
-     * <p><b>Thread Safety:</b> Implementations should document their thread safety guarantees.
-     * 
-     * @param id the unique identifier for this vector (typically 0-based sequential)
+     * @param id the unique identifier for this vector (must be >= 0 and < totalNumberOfVectors)
      * @param vector the vector data to store (length must equal dimensions)
-     * @throws IllegalArgumentException if vector length doesn't match dimensions
-     * @throws IndexOutOfBoundsException if storage capacity is exceeded
-     * @throws NullPointerException if vector is null
+     * @throws IndexOutOfBoundsException if id is out of bounds
      */
-    public abstract void addVector(int id, float[] vector);
+    public void addVector(int id, float[] vector) {
+        checkBounds(id);
+        addVectorImpl(id, vector);
+    }
+
+    /**
+     * Implementation-specific logic for adding a vector.
+     * 
+     * <p>Subclasses must implement this method to store the vector data.
+     * Bounds checking is already performed by {@link #addVector(int, float[])}.
+     * 
+     * @param id the unique identifier for this vector (guaranteed to be in bounds)
+     * @param vector the vector data to store
+     */
+    public abstract void addVectorImpl(int id, float[] vector);
 
     /**
      * Retrieves a vector from the storage by its ID.
      * 
-     * <p>Implementations may:
-     * <ul>
-     *   <li>Return a direct reference to stored data (fast but mutable)</li>
-     *   <li>Return a copy of the data (safe but slower)</li>
-     *   <li>Reuse a shared array (fastest but not thread-safe)</li>
-     * </ul>
-     * 
-     * <p>Callers should check implementation documentation for:
-     * <ul>
-     *   <li>Whether the returned array can be modified</li>
-     *   <li>Whether the array is reused across calls</li>
-     *   <li>Thread safety guarantees</li>
-     * </ul>
+     * <p>This method performs bounds checking before delegating to the implementation.
+     * Subclasses should implement {@link #getVectorImpl(int, float[])} for actual retrieval logic.
      * 
      * @param id the unique identifier of the vector to retrieve
-     * @return the vector data, or null if no vector exists with the given ID
-     * @throws IndexOutOfBoundsException if id is negative or exceeds capacity
+     * @return the vector data
+     * @throws IndexOutOfBoundsException if id is out of bounds
      */
-    public abstract float[] getVector(int id);
+    public float[] getVector(int id) {
+        checkBounds(id);
+        return getVectorImpl(id, vector);
+    }
+
+    /**
+     * Implementation-specific logic for retrieving a vector.
+     * 
+     * <p>Subclasses must implement this method to retrieve the vector data.
+     * Bounds checking is already performed by {@link #getVector(int)}.
+     * 
+     * @param id the unique identifier of the vector to retrieve (guaranteed to be in bounds)
+     * @return the vector data
+     */
+    protected abstract float[] getVectorImpl(int id, float[] vector);
+
+    /**
+     * Validates that the given vector ID is within valid bounds.
+     * 
+     * @param id the vector ID to validate
+     * @throws IndexOutOfBoundsException if id is negative or >= totalNumberOfVectors
+     */
+    protected void checkBounds(int id) {
+         if (id < 0 || id >= totalNumberOfVectors) {
+            throw new IndexOutOfBoundsException("Vector ID out of bounds: " + id);
+        }
+    }
 
 }

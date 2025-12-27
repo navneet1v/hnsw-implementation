@@ -1,4 +1,4 @@
-package org.navneev;
+package org.navneev.storage;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -79,11 +79,9 @@ public class OnHeapVectorStorage extends VectorStorage {
      * 
      * @param id the unique identifier for this vector
      * @param vector the vector data to store (will be copied)
-     * @throws IllegalArgumentException if vector length doesn't match dimensions
-     * @throws NullPointerException if vector is null
      */
     @Override
-    public void addVector(int id, float[] vector) {
+    public void addVectorImpl(int id, float[] vector) {
         float[] copiedVector = new float[vector.length];
         System.arraycopy(vector, 0, copiedVector, 0, vector.length);
         idToVectorMap.put(id, copiedVector);
@@ -102,7 +100,7 @@ public class OnHeapVectorStorage extends VectorStorage {
      * @return the vector data, or null if no vector exists with the given ID
      */
     @Override
-    public float[] getVector(int id) {
+    public float[] getVectorImpl(int id, float[] vector) {
         return idToVectorMap.get(id);
     }
 }

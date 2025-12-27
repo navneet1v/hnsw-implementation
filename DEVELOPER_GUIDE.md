@@ -247,11 +247,7 @@ VectorStorage storage = new OnHeapVectorStorage(128, 1000000);
 **Off-Heap:**
 ```java
 OffHeapVectorsStorage storage = new OffHeapVectorsStorage(128, 1000000);
-try {
-    // Use storage
-} finally {
-    storage.cleanup(); // Explicit cleanup required
-}
+// Automatic cleanup via GC
 ```
 
 ### Memory Management
@@ -285,12 +281,35 @@ java {
 }
 
 compileJava {
-    options.compilerArgs += ['--add-modules', 'jdk.incubator.vector']
+    options.compilerArgs += ['--add-modules', 'jdk.incubator.vector', '--enable-preview']
 }
 
 run {
-    jvmArgs '--add-modules', 'jdk.incubator.vector'
+    def xms = System.getProperty('xms', '4m')
+    def xmx = System.getProperty('xmx', '4g')
+    jvmArgs '--add-modules', 'jdk.incubator.vector', '--enable-preview', "-Xms${xms}", "-Xmx${xmx}"
+    systemProperties = System.properties
 }
+```
+
+### Runtime Configuration
+
+**Memory Settings:**
+```bash
+# Use defaults (Xms=4g, Xmx=4g)
+./gradlew run
+
+# Custom memory allocation
+./gradlew run -Dxms=1g -Dxmx=4g
+```
+
+**Vector Storage Selection:**
+```bash
+# On-heap storage (default)
+./gradlew run -Dvector.storage=ON_HEAP
+
+# Off-heap storage for large datasets
+./gradlew run -Dvector.storage=OFF_HEAP
 ```
 
 ### Dependencies

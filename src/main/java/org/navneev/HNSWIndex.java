@@ -1,13 +1,18 @@
 package org.navneev;
 
+import org.navneev.storage.StorageFactory;
+import org.navneev.storage.VectorStorage;
 import org.navneev.utils.VectorUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.PriorityQueue;
-
-import java.util.*;
+import java.util.Random;
 
 /**
  * High-performance implementation of Hierarchical Navigable Small World (HNSW) algorithm
@@ -65,7 +70,7 @@ public class HNSWIndex {
     private static final int DEFAULT_EF_CONSTRUCTION = 100;
 
     /** Map of node IDs to HNSWNode objects for fast node lookup */
-    private final Map<Integer, HNSWNode> nodesById = new HashMap<>();
+    private final HNSWNode[] nodesById;
 
     /** Maximum number of connections per node (M parameter from paper) */
     private final int M = 16;
@@ -77,13 +82,16 @@ public class HNSWIndex {
     private final Random random;
 
     /** ID of the entry point node (highest level node) */
-    private Integer entryPoint = null;
+    private int entryPoint = -1;
 
     /** Map of node IDs to their vector data for distance calculations */
     private final VectorStorage idToVectorStorage;
 
     /** Current maximum level in the graph */
     private int maxLevel = -1;
+
+    /** Current NodeId in the graph */
+    private int currentNodeId = 0;
 
     /**
      * Constructs a new HNSW index with default parameters.
@@ -101,7 +109,8 @@ public class HNSWIndex {
 
     public HNSWIndex(int efConstruction, int dimensions, int totalNumberOfVectors) {
         this.efConstruction = efConstruction;
-        this.idToVectorStorage = new OffHeapVectorsStorage(dimensions, totalNumberOfVectors);
+        this.idToVectorStorage = StorageFactory.createStorage(dimensions, totalNumberOfVectors);
+        this.nodesById = new HNSWNode[totalNumberOfVectors];
         random = new Random();
     }
 
@@ -152,33 +161,34 @@ public class HNSWIndex {
     public void addNode(float[] vector) {
         // max level, where level start from 0
         int level = getRandomLevel();
-        int nodeId = nodesById.size();
-        HNSWNode newNode = new HNSWNode(nodeId, level);
-        nodesById.put(nodeId, newNode);
+        int nodeId = currentNodeId;
+        currentNodeId ++;
+        final HNSWNode newNode = new HNSWNode(nodeId, level, M);
+        nodesById[nodeId] =  newNode;
         idToVectorStorage.addVector(nodeId, vector);
 
-        if (entryPoint == null) {
+        if (entryPoint == -1) {
             entryPoint = nodeId;
             maxLevel = level;
             return;
         }
 
-        Integer current = entryPoint;
+        int current = entryPoint;
 
         // Traverse from top layer to newNode's level
         for (int l = maxLevel; l > level; l--) {
-            current = searchLayer(vector, current, 1, l).get(0);
+            current = searchLayer(vector, current, 1, l)[0];
         }
 
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
 
-            final List<Integer> neighborsIds = searchLayer(vector, current, efConstruction, l);
+            final int[] neighborsIds = searchLayer(vector, current, efConstruction, l);
 
-            final List<Integer> selected = selectNeighborsHeuristic(neighborsIds, M, newNode.id);
+            final List<Integer> selected = selectNeighborsHeuristic(neighborsIds, newNode.id);
 
             for (final Integer neighbor : selected) {
                 newNode.addNeighbor(l, neighbor);
-                nodesById.get(neighbor).addNeighbor(l, newNode.id);
+                nodesById[neighbor].addNeighbor(l, newNode.id);
             }
         }
 
@@ -205,9 +215,9 @@ public class HNSWIndex {
      * @param entry the entry point node ID for this layer
      * @param ef the maximum number of candidates to maintain
      * @param layer the layer number to search in
-     * @return list of node IDs sorted by distance (closest first)
+     * @return array of node IDs sorted by distance (closest first)
      */
-    private List<Integer> searchLayer(float[] query, Integer entry, int ef, int layer) {
+    private int[] searchLayer(float[] query, Integer entry, int ef, int layer) {
         // Min Heap
         final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
                 Comparator.comparingDouble(IdAndDistance::distance)
@@ -234,7 +244,7 @@ public class HNSWIndex {
                 break;
             }
 
-            for (Integer neighborId : nodesById.get(current.id()).getNeighbors(layer)) {
+            for (int neighborId : nodesById[current.id()].getNeighbors(layer)) {
                 if (!visited.get(neighborId)) {
                     visited.set(neighborId);
                     final IdAndDistance neighborIdAndDistance = new IdAndDistance(neighborId, dis(neighborId, query));
@@ -252,12 +262,15 @@ public class HNSWIndex {
             }
         }
 
-        List<Integer> list = new ArrayList<>(result.size());
+        int[] resultArray = new int[result.size()];
+        int i = result.size() - 1;
+
         while (!result.isEmpty()) {
-            list.add(result.poll().id());
+            resultArray[i] = result.poll().id();
+            i--;
         }
-        Collections.reverse(list);
-        return list;
+
+        return resultArray;
     }
 
     /**
@@ -274,19 +287,18 @@ public class HNSWIndex {
      * and ensuring efficient search paths.
      *
      * @param candidates list of candidate node IDs sorted by distance
-     * @param M maximum number of neighbors to select
      * @param newNodeId ID of the node being connected
      * @return list of selected neighbor IDs (size ≤ M)
      */
-    private List<Integer> selectNeighborsHeuristic(List<Integer> candidates, int M, int newNodeId) {
-        List<Integer> finalSelected = new ArrayList<>();
+    private List<Integer> selectNeighborsHeuristic(int[] candidates, int newNodeId) {
+        List<Integer> finalSelected = new ArrayList<>(M);
         int counter = 0;
-        while (counter< candidates.size() && finalSelected.size() < M) {
+        while (counter< candidates.length && finalSelected.size() < M) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
-            Integer candidate = candidates.get(counter);
+            int candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
-            for(Integer currentNeighbor : finalSelected) {
+            for(int currentNeighbor : finalSelected) {
                 // if the node which we are trying to add as a neighbor is closet to already connected neighbor then
                 // we should not add that node in neighbors list.
                 if(dis(currentNeighbor, candidate) < dis(candidate, newNodeId) ) {
@@ -343,18 +355,16 @@ public class HNSWIndex {
      * @throws IllegalArgumentException if k ≤ 0 or efSearch < k
      */
     public int[] search(float[] query, int k, int ef_search) {
-        Integer current = entryPoint;
+        int current = entryPoint;
         // Search all the top layers to find the entry point for the bottom layer.
         for (int l = maxLevel; l >= 1; l--) {
-            current = searchLayer(query, current, 1, l).get(0);
+            current = searchLayer(query, current, 1, l)[0];
         }
         // Now Search on the bottom layer
-        List<Integer> results = searchLayer(query, current, ef_search, 0);
-        int finalSize = Math.min(k, results.size());
+        final int[] results = searchLayer(query, current, ef_search, 0);
+        int finalSize = Math.min(k, results.length);
         int[] resultIds = new int[finalSize];
-        for(int i = 0; i < finalSize; i++) {
-            resultIds[i] = Objects.requireNonNull(results.get(i));
-        }
+        System.arraycopy(results, 0, resultIds, 0, finalSize);
         return resultIds;
     }
 
