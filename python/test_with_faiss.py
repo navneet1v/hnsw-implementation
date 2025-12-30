@@ -28,6 +28,7 @@ index.add(vectors)
 # Search for top 10 nearest neighbors
 distances, indices = index.search(queries, k)
 
+
 print(f"\nFAISS HNSW Results:")
 for i in range(min(5, len(queries))):
     print(f"Query {i} - Ground truth: {groundtruth[i][:5]}, FAISS: {indices[i][:5]}")
@@ -47,4 +48,12 @@ def calculate_recall(groundtruth, results):
     return total_found / total_relevant
 
 recall = calculate_recall(groundtruth, indices)
-print(f"\nFAISS HNSW Recall@{k}: {recall:.3f}")
+print(f"\nRecall@{k}: {recall:.3f}")
+
+# Print HNSW stats
+print(f"\nFAISS HNSW Index Stats:")
+print(f"efConstruction: {index.hnsw.efConstruction}")
+print(f"efSearch: {index.hnsw.efSearch}")
+print(f"max_level: {index.hnsw.max_level}")
+print(f"entry_point: {index.hnsw.entry_point}")
+print(f"Total vectors: {index.ntotal}")

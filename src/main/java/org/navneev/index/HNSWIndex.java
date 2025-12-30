@@ -1,9 +1,11 @@
 package org.navneev.index;
 
 import org.navneev.index.model.HNSWNode;
+import org.navneev.index.model.HNSWStats;
 import org.navneev.index.model.IntegerList;
 import org.navneev.index.storage.StorageFactory;
 import org.navneev.index.storage.VectorStorage;
+import org.navneev.utils.HNSWLevelGenerator;
 import org.navneev.utils.VectorUtils;
 
 import java.security.SecureRandom;
@@ -76,7 +78,7 @@ public class HNSWIndex {
     private final int efConstruction;
 
     /** Random number generator for level assignment */
-    private final SecureRandom random = new SecureRandom();
+    private final HNSWLevelGenerator levelGenerator;
 
     /** ID of the entry point node (highest level node) */
     private int entryPoint = -1;
@@ -92,6 +94,8 @@ public class HNSWIndex {
 
     /** Distance vector used for distance calculations */
     private final float[] distanceVector;
+
+    private final int dimensions;
 
     /**
      * Constructs a new HNSW index with default parameters.
@@ -112,32 +116,8 @@ public class HNSWIndex {
         this.idToVectorStorage = StorageFactory.createStorage(dimensions, totalNumberOfVectors);
         this.nodesById = new HNSWNode[totalNumberOfVectors];
         this.distanceVector = new float[dimensions];
-    }
-
-    /**
-     * Returns the level of a node based on the HNSW probability function.
-     *
-     * <p>Uses exponential decay probability: P(level = l) = (1/ln(M))^l
-     * This creates a natural hierarchy where:
-     * <ul>
-     *   <li>All nodes exist at level 0</li>
-     *   <li>~62% of nodes reach level 1 (with M=16)</li>
-     *   <li>~38% of nodes reach level 2</li>
-     *   <li>Exponentially fewer nodes at higher levels</li>
-     * </ul>
-     *
-     * <p>The probability formula ensures that as M increases, the hierarchy
-     * becomes steeper, creating more efficient search paths.
-     *
-     * @return randomly assigned level for a new node (≥ 0)
-     */
-    private int getRandomLevel() {
-        double prob = 1.0 / Math.log(M);
-        int level = 0;
-        while (random.nextDouble() < prob) {
-            level++;
-        }
-        return level;
+        this.dimensions = dimensions;
+        this.levelGenerator = new HNSWLevelGenerator(M);
     }
 
     /**
@@ -160,7 +140,7 @@ public class HNSWIndex {
      */
     public void addNode(float[] vector) {
         // max level, where level start from 0
-        int level = getRandomLevel();
+        int level = levelGenerator.getRandomLevel();
         int nodeId = currentNodeId;
         currentNodeId ++;
         final HNSWNode newNode = new HNSWNode(nodeId, level, M);
@@ -408,6 +388,18 @@ public class HNSWIndex {
             resultIds[i] = results[i].id();
         }
         return resultIds;
+    }
+
+    public HNSWStats getHNSWIndexStats() {
+        return HNSWStats.builder()
+                .M(M)
+                .efConstruction(efConstruction)
+                .totalNumberOfNodes(idToVectorStorage.getTotalNumberOfVectors())
+                .dimensions(dimensions)
+                .levels(maxLevel + 1)
+                .maxLevel(maxLevel)
+                .entryPoint(entryPoint)
+                .build();
     }
 
     private float[] cloneAndGetVector(int id) {

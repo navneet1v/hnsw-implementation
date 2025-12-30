@@ -80,6 +80,8 @@ public class Main {
         try {
             HNSWIndex index = buildIndex(hdf5FilePath);
             System.gc();
+
+            System.out.println("HNSW Stats: " + index.getHNSWIndexStats());
             
             System.out.println("\nTesting search...");
             int k = 100;

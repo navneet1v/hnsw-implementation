@@ -261,7 +261,8 @@ class HNSWIndexTest {
         float[] testQuery = vectors[0];
         int[] simpleResults = index.search(testQuery, 1, 50);
         System.out.println("Searching for vector 0, got result: " + simpleResults[0]);
-        
+
+        System.out.println("HNSW Stats: " + index.getHNSWIndexStats());
         // Lower threshold for debugging
         assertTrue(recall > 0.6f, "Recall should be > 0.6, got: " + recall);
     }
