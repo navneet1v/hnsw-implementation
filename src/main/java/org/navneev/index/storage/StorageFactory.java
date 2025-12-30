@@ -1,4 +1,4 @@
-package org.navneev.storage;
+package org.navneev.index.storage;
 
 /**
  * Factory class for creating VectorStorage instances based on system configuration.
@@ -40,7 +40,8 @@ public class StorageFactory {
      * @throws IllegalArgumentException if vector.storage property has invalid value
      */
     public static VectorStorage createStorage(int dimensions, int totalNumberOfVectors) {
-        StorageType storageType = StorageType.valueOf(System.getProperty(VECTOR_STORAGE_KEY, DEFAULT_VECTOR_STORAGE));
+        final StorageType storageType = StorageType.valueOf(System.getProperty(VECTOR_STORAGE_KEY,
+                DEFAULT_VECTOR_STORAGE));
 
         return switch (storageType) {
             case StorageType.ON_HEAP -> new OnHeapVectorStorage(dimensions, totalNumberOfVectors);

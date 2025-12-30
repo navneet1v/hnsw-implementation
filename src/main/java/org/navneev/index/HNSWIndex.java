@@ -1,16 +1,13 @@
-package org.navneev;
+package org.navneev.index;
 
-import org.navneev.storage.StorageFactory;
-import org.navneev.storage.VectorStorage;
+import org.navneev.index.model.HNSWNode;
+import org.navneev.index.model.IntegerList;
+import org.navneev.index.storage.StorageFactory;
+import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.VectorUtils;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Random;
 
@@ -79,7 +76,7 @@ public class HNSWIndex {
     private final int efConstruction;
 
     /** Random number generator for level assignment */
-    private final Random random;
+    private final Random random = new Random();
 
     /** ID of the entry point node (highest level node) */
     private int entryPoint = -1;
@@ -111,7 +108,6 @@ public class HNSWIndex {
         this.efConstruction = efConstruction;
         this.idToVectorStorage = StorageFactory.createStorage(dimensions, totalNumberOfVectors);
         this.nodesById = new HNSWNode[totalNumberOfVectors];
-        random = new Random();
     }
 
     /**
@@ -180,22 +176,73 @@ public class HNSWIndex {
             current = searchLayer(vector, current, 1, l)[0];
         }
 
+        int neighbor;
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
-
+            // find the neighbors to be added
             final int[] neighborsIds = searchLayer(vector, current, efConstruction, l);
-
-            final List<Integer> selected = selectNeighborsHeuristic(neighborsIds, newNode.id);
-
-            for (final Integer neighbor : selected) {
+            // select the final list of neighbors to be added.
+            final IntegerList selected = selectNeighborsHeuristic(neighborsIds, newNode.id, l);
+            // Add the new node per level and also attach the correct neighbors
+            for (int i = 0; i < selected.size(); i++) {
+                neighbor = selected.get(i);
+                // Create all the bidirectional links
                 newNode.addNeighbor(l, neighbor);
                 nodesById[neighbor].addNeighbor(l, newNode.id);
             }
+
+            for (int i = 0; i < selected.size(); i++) {
+                neighbor = selected.get(i);
+                final IntegerList neighborsConnections = nodesById[neighbor].getNeighbors(l);
+                if (neighborsConnections.size() > M) {
+                    // shrink the neighbors
+                    IntegerList shrinkedNeighborhood = shrinkNeighbors(neighbor, neighborsConnections, level);
+                    nodesById[neighbor].updateNeighborhood(l, shrinkedNeighborhood);
+                }
+
+            }
         }
 
+        // New level got created and the current node is getting added here, lets make this new node as the entry point.
         if (level > maxLevel) {
             entryPoint = newNode.id;
             maxLevel = level;
         }
+    }
+
+    private IntegerList shrinkNeighbors(int q, IntegerList candidates, int level) {
+        final IntegerList result = new IntegerList(M);
+        final IntegerList discardedCandidates = new IntegerList();
+        final PriorityQueue<IdAndDistance> candidatesQueue =
+                new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance));
+        for(int i = 0 ; i < candidates.size() ; i++) {
+            candidatesQueue.add(new IdAndDistance(candidates.get(i), q));
+        }
+
+        while(!candidatesQueue.isEmpty() && result.size() < M) {
+            // get the closest candidate from q.
+            IdAndDistance candidate = candidatesQueue.poll();
+            boolean add = true;
+            for(int i = 0 ; i < result.size() ; i++) {
+                if(candidate.distance() > dis(candidate.id(), result.get(i))) {
+                    add = false;
+                    break;
+                }
+            }
+
+            if(add) {
+                result.add(candidate.id());
+            } else {
+                discardedCandidates.add(candidate.id());
+            }
+
+        }
+        int counter = 0;
+        while(level == 0 && result.size() < M && discardedCandidates.size() > 0 && counter < discardedCandidates.size() ) {
+            result.add(discardedCandidates.get(counter));
+            counter++;
+        }
+        return result;
+
     }
 
     /**
@@ -217,44 +264,46 @@ public class HNSWIndex {
      * @param layer the layer number to search in
      * @return array of node IDs sorted by distance (closest first)
      */
-    private int[] searchLayer(float[] query, Integer entry, int ef, int layer) {
+    private int[] searchLayer(float[] query, int entry, int ef, int layer) {
         // Min Heap
         final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
                 Comparator.comparingDouble(IdAndDistance::distance)
         );
-        // Min Heap
+        // Max Heap
         final PriorityQueue<IdAndDistance> result = new PriorityQueue<>(
-                Comparator.comparingDouble(IdAndDistance::distance)
+                Comparator.comparingDouble(IdAndDistance::distance).reversed()
         );
 
         final BitSet visited = new BitSet(idToVectorStorage.getTotalNumberOfVectors());
-        final float entryPointDistance = dis(entry, query);
+        final double entryPointDistance = dis(entry, query);
 
         candidates.add(new IdAndDistance(entry, entryPointDistance));
         visited.set(entry);
-        // negating distance to ensure that worst neighbor comes on top.
-        result.add(new IdAndDistance(entry, -entryPointDistance));
+        result.add(new IdAndDistance(entry, entryPointDistance));
 
         while (!candidates.isEmpty()) {
-            IdAndDistance current = candidates.poll();
-            IdAndDistance farthestElement = result.element();
-            float distanceFQ = farthestElement.distance() * -1;
-            if(current.distance() > distanceFQ) {
+            IdAndDistance candidate = candidates.poll();
+            IdAndDistance farthestElementInResult = result.element();
+            if(candidate.distance() > farthestElementInResult.distance() && candidate.id() != farthestElementInResult.id()) {
                 // All elements in result is evaluated
                 break;
             }
 
-            for (int neighborId : nodesById[current.id()].getNeighbors(layer)) {
+            final IntegerList neighborsList = nodesById[candidate.id()].getNeighbors(layer);
+            int neighborId;
+            for (int i = 0; i < neighborsList.size(); i++) {
+                neighborId = neighborsList.get(i);
                 if (!visited.get(neighborId)) {
                     visited.set(neighborId);
                     final IdAndDistance neighborIdAndDistance = new IdAndDistance(neighborId, dis(neighborId, query));
 
                     // Main logic: if current neighbor is closer than the worst node present in the result, or result
-                    // size is less than ef add the neighbor in final list. This logic is directly taken from the paper
-                    if(neighborIdAndDistance.distance() < distanceFQ || result.size() < ef) {
+                    // size is less than ef add the neighbor in final list.
+                    farthestElementInResult = result.element();
+                    if(neighborIdAndDistance.distance() < farthestElementInResult.distance() || result.size() < ef) {
                         candidates.add(neighborIdAndDistance);
-                        result.add(new IdAndDistance(neighborId, -neighborIdAndDistance.distance()));
-                        while(result.size() > ef) {
+                        result.add(new IdAndDistance(neighborId, neighborIdAndDistance.distance()));
+                        if(result.size() > ef) {
                             result.poll();
                         }
                     }
@@ -262,6 +311,7 @@ public class HNSWIndex {
             }
         }
 
+        // reversing the result to ensure that closest neighbors are returned
         int[] resultArray = new int[result.size()];
         int i = result.size() - 1;
 
@@ -287,28 +337,41 @@ public class HNSWIndex {
      * and ensuring efficient search paths.
      *
      * @param candidates list of candidate node IDs sorted by distance
-     * @param newNodeId ID of the node being connected
+     * @param nodeToLinkNeighborsTo ID of the node being connected
      * @return list of selected neighbor IDs (size ≤ M)
      */
-    private List<Integer> selectNeighborsHeuristic(int[] candidates, int newNodeId) {
-        List<Integer> finalSelected = new ArrayList<>(M);
+    private IntegerList selectNeighborsHeuristic(int[] candidates, int nodeToLinkNeighborsTo, int level) {
+        final IntegerList finalSelected = new IntegerList(M);
+        final IntegerList discardedList = new IntegerList(M);
         int counter = 0;
-        while (counter< candidates.length && finalSelected.size() < M) {
+        while (counter < candidates.length && finalSelected.size() < M) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
             int candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
-            for(int currentNeighbor : finalSelected) {
-                // if the node which we are trying to add as a neighbor is closet to already connected neighbor then
-                // we should not add that node in neighbors list.
-                if(dis(currentNeighbor, candidate) < dis(candidate, newNodeId) ) {
+            int currentNeighbor;
+            for(int i = 0; i < finalSelected.size(); i++) {
+                currentNeighbor = finalSelected.get(i);
+                // if the candidate is closer to an already selected neighbor than to the node we're linking to,
+                // then it's not diverse enough and should be rejected
+                if(dis(candidate, currentNeighbor) < dis(candidate, nodeToLinkNeighborsTo) ) {
                     isDiverse = false;
+                    break;
                 }
             }
             if(isDiverse) {
                 finalSelected.add(candidate);
+            } else {
+                discardedList.add(candidate);
             }
         }
+
+        counter = 0;
+        while(finalSelected.size() < M && level == 0 && counter < discardedList.size()) {
+            finalSelected.add(discardedList.get(counter));
+            counter++;
+        }
+
         return finalSelected;
     }
 
@@ -319,7 +382,7 @@ public class HNSWIndex {
      * @param b second node ID
      * @return squared Euclidean distance between the nodes
      */
-    private float dis(int a, int b) {
+    private double dis(int a, int b) {
         return VectorUtils.euclideanDistance(idToVectorStorage.getVector(a), idToVectorStorage.getVector(b));
     }
 
@@ -330,7 +393,7 @@ public class HNSWIndex {
      * @param q query vector
      * @return squared Euclidean distance
      */
-    private float dis(int id, float[] q) {
+    private double dis(int id, float[] q) {
             return VectorUtils.euclideanDistance(idToVectorStorage.getVector(id), q);
     }
 
@@ -375,5 +438,5 @@ public class HNSWIndex {
      * @param id the node identifier
      * @param distance the distance from query (squared Euclidean distance)
      */
-    record IdAndDistance(int id, float distance) {}
+    record IdAndDistance(int id, double distance) {}
 }

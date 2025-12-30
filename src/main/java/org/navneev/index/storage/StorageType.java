@@ -1,4 +1,4 @@
-package org.navneev.storage;
+package org.navneev.index.storage;
 
 /**
  * Enumeration of available vector storage types.

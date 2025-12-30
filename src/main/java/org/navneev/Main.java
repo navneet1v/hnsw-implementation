@@ -1,6 +1,7 @@
 package org.navneev;
 
 import org.navneev.dataset.HDF5Reader;
+import org.navneev.index.HNSWIndex;
 
 import java.util.ArrayList;
 import java.util.Arrays;

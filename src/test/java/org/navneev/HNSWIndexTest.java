@@ -1,7 +1,7 @@
 package org.navneev;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.navneev.index.HNSWIndex;
 import org.navneev.utils.VectorUtils;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -183,7 +183,7 @@ class HNSWIndexTest {
     void testIdenticalVectors() {
         float[] vector = {1.0f, 2.0f, 3.0f};
 
-        index = new HNSWIndex(vector.length, 1);
+        index = new HNSWIndex(vector.length, 3);
         
         // Add the same vector multiple times
         for (int i = 0; i < 3; i++) {
@@ -208,6 +208,9 @@ class HNSWIndexTest {
         
         // Generate vectors
         float[][] vectors = generateUniqueVectors(NUM_VECTORS, DIMENSIONS);
+        
+        // Write vectors to file for Python analysis
+        writeVectorsToFile(vectors, "vectors.txt");
 
         index = new HNSWIndex(DIMENSIONS, NUM_VECTORS);
         
@@ -220,8 +223,14 @@ class HNSWIndexTest {
         // Generate random query vectors (not from the dataset)
         float[][] queries = generateUniqueVectors(NUM_QUERIES, DIMENSIONS, 123); // Different seed
         
+        // Write queries to file for Python analysis
+        writeVectorsToFile(queries, "queries.txt");
+        
         // Compute ground truth
         int[][] groundTruth = computeGroundTruth(vectors, queries, K);
+        
+        // Write ground truth to file for Python analysis
+        writeGroundTruthToFile(groundTruth, "groundtruth.txt");
         
         // Test HNSW search with higher ef_search
         int[][] hnswResults = new int[NUM_QUERIES][];
@@ -256,6 +265,33 @@ class HNSWIndexTest {
         // Lower threshold for debugging
         assertTrue(recall > 0.1f, "Recall should be > 0.1, got: " + recall);
     }
+
+    @Test
+    void testExactMatchDebug() {
+        HNSWIndex index = new HNSWIndex(2, 10);
+        
+        // Add a few vectors
+        float[] vector0 = {1.0f, 2.0f};
+        float[] vector1 = {3.0f, 4.0f};
+        float[] vector2 = {5.0f, 6.0f};
+        
+        index.addNode(vector0);
+        index.addNode(vector1);
+        index.addNode(vector2);
+        
+        // Search for exact matches
+        System.out.println("Searching for vector0 (1.0, 2.0):");
+        int[] results0 = index.search(vector0, 1, 10);
+        System.out.println("Expected: 0, Got: " + results0[0]);
+        
+        System.out.println("Searching for vector1 (3.0, 4.0):");
+        int[] results1 = index.search(vector1, 1, 10);
+        System.out.println("Expected: 1, Got: " + results1[0]);
+        
+        System.out.println("Searching for vector2 (5.0, 6.0):");
+        int[] results2 = index.search(vector2, 1, 10);
+        System.out.println("Expected: 2, Got: " + results2[0]);
+    }
     
     private float[][] generateUniqueVectors(int numVectors, int dimensions) {
         return generateUniqueVectors(numVectors, dimensions, 42);
@@ -267,7 +303,7 @@ class HNSWIndexTest {
         
         for (int i = 0; i < numVectors; i++) {
             for (int j = 0; j < dimensions; j++) {
-                vectors[i][j] = (float) (random.nextGaussian() * 0.5f);
+                vectors[i][j] = (float) ((random.nextGaussian() * 10) + (random.nextGaussian() * 100) );
             }
             // Normalize vector
             float norm = 0;
@@ -289,9 +325,9 @@ class HNSWIndexTest {
         
         for (int q = 0; q < queries.length; q++) {
             // Calculate distances to all vectors
-            java.util.List<java.util.Map.Entry<Integer, Float>> distances = new java.util.ArrayList<>();
+            java.util.List<java.util.Map.Entry<Integer, Double>> distances = new java.util.ArrayList<>();
             for (int i = 0; i < vectors.length; i++) {
-                float distance = VectorUtils.euclideanDistance(vectors[i], queries[q]);
+                double distance = VectorUtils.euclideanDistance(vectors[i], queries[q]);
                 distances.add(new java.util.AbstractMap.SimpleEntry<>(i, distance));
             }
             
@@ -325,5 +361,33 @@ class HNSWIndexTest {
         }
         
         return (float) totalFound / totalRelevant;
+    }
+    
+    private void writeVectorsToFile(float[][] vectors, String filename) {
+        try (java.io.PrintWriter writer = new java.io.PrintWriter(filename)) {
+            for (float[] vector : vectors) {
+                for (int i = 0; i < vector.length; i++) {
+                    writer.print(vector[i]);
+                    if (i < vector.length - 1) writer.print(",");
+                }
+                writer.println();
+            }
+        } catch (java.io.FileNotFoundException e) {
+            System.err.println("Error writing to file: " + e.getMessage());
+        }
+    }
+    
+    private void writeGroundTruthToFile(int[][] groundTruth, String filename) {
+        try (java.io.PrintWriter writer = new java.io.PrintWriter(filename)) {
+            for (int[] gt : groundTruth) {
+                for (int i = 0; i < gt.length; i++) {
+                    writer.print(gt[i]);
+                    if (i < gt.length - 1) writer.print(",");
+                }
+                writer.println();
+            }
+        } catch (java.io.FileNotFoundException e) {
+            System.err.println("Error writing to file: " + e.getMessage());
+        }
     }
 }

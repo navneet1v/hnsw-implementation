@@ -1,9 +1,4 @@
-package org.navneev;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+package org.navneev.index.model;
 
 /**
  * Represents a node in the HNSW (Hierarchical Navigable Small World) graph structure.
@@ -25,10 +20,10 @@ public class HNSWNode {
     public int id;
     
     /** Highest level this node exists in (0-based indexing) */
-    public int level;
+    private final int highestNodeLevel;
     
     /** Map of layer number to list of neighbor node IDs for that layer */
-    public Map<Integer, List<Integer>> neighborsByLayer;
+    private IntegerList[] neighborsByLayer;
 
     /**
      * Constructs a new HNSW node with the specified ID and level.
@@ -37,14 +32,17 @@ public class HNSWNode {
      * The node will participate in layers 0 through level (inclusive).
      * 
      * @param id unique identifier for this node
-     * @param level highest level this node will exist in (must be >= 0)
+     * @param highestNodeLevel highest level this node will exist in (must be >= 0)
      */
-    public HNSWNode(int id, int level, int maxNeighbors) {
+    public HNSWNode(int id, int highestNodeLevel, int maxNeighbors) {
         this.id = id;
-        this.level = level;
-        this.neighborsByLayer = new HashMap<>();
-        for (int l = 0; l <= level; l++) {
-            neighborsByLayer.put(l, new ArrayList<>(maxNeighbors));
+        this.highestNodeLevel = highestNodeLevel;
+        // since node level is 0-based index
+        this.neighborsByLayer = new IntegerList[highestNodeLevel + 1];
+        // make 16 size integer list for the bottom layer as it is expected to have those many connections
+        neighborsByLayer[0] = new IntegerList(maxNeighbors + 1);
+        for (int l = 1; l <= this.highestNodeLevel; l++) {
+            neighborsByLayer[l] = new IntegerList();
         }
     }
 
@@ -57,8 +55,9 @@ public class HNSWNode {
      * @param layer the layer number to get neighbors for
      * @return list of neighbor node IDs for the specified layer, never null
      */
-    public List<Integer> getNeighbors(int layer) {
-        return neighborsByLayer.getOrDefault(layer, new ArrayList<>());
+    public IntegerList getNeighbors(int layer) {
+        layerBoundsCheck(layer);
+        return neighborsByLayer[layer];
     }
 
     /**
@@ -73,6 +72,18 @@ public class HNSWNode {
      * @throws IllegalArgumentException if the layer is invalid for this node
      */
     public void addNeighbor(int layer, int neighbor) {
-        neighborsByLayer.get(layer).add(neighbor);
+        layerBoundsCheck(layer);
+        neighborsByLayer[layer].add(neighbor);
+    }
+
+    public void updateNeighborhood(int layer, final IntegerList neighborhood) {
+        layerBoundsCheck(layer);
+        neighborsByLayer[layer] = neighborhood;
+    }
+
+    private void layerBoundsCheck(int layer) {
+        if (layer < 0 || layer > highestNodeLevel) {
+            throw new IllegalArgumentException("Invalid layer number : " + layer + " Max value : " + highestNodeLevel);
+        }
     }
 }

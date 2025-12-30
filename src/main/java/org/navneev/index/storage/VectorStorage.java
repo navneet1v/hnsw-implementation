@@ -1,4 +1,4 @@
-package org.navneev.storage;
+package org.navneev.index.storage;
 
 import lombok.Getter;
 

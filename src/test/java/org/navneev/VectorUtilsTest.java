@@ -14,7 +14,7 @@ class VectorUtilsTest {
         float[] a = {1.0f, 2.0f, 3.0f};
         float[] b = {1.0f, 2.0f, 3.0f};
 
-        float result = VectorUtils.euclideanDistance(a, b);
+        double result = VectorUtils.euclideanDistance(a, b);
         assertEquals(0.0, result, DELTA);
     }
 
