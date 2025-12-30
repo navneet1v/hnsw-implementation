@@ -90,6 +90,9 @@ public class HNSWIndex {
     /** Current NodeId in the graph */
     private int currentNodeId = 0;
 
+    /** Distance vector used for distance calculations */
+    private final float[] distanceVector;
+
     /**
      * Constructs a new HNSW index with default parameters.
      *
@@ -108,6 +111,7 @@ public class HNSWIndex {
         this.efConstruction = efConstruction;
         this.idToVectorStorage = StorageFactory.createStorage(dimensions, totalNumberOfVectors);
         this.nodesById = new HNSWNode[totalNumberOfVectors];
+        this.distanceVector = new float[dimensions];
     }
 
     /**
@@ -173,15 +177,15 @@ public class HNSWIndex {
 
         // Traverse from top layer to newNode's level
         for (int l = maxLevel; l > level; l--) {
-            current = searchLayer(vector, current, 1, l)[0];
+            current = searchLayer(vector, current, 1, l)[0].id();
         }
 
         int neighbor;
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
             // find the neighbors to be added
-            final int[] neighborsIds = searchLayer(vector, current, efConstruction, l);
+            final IdAndDistance[] neighborsIdAndDistance = searchLayer(vector, current, efConstruction, l);
             // select the final list of neighbors to be added.
-            final IntegerList selected = selectNeighborsHeuristic(neighborsIds, newNode.id, l);
+            final IntegerList selected = selectNeighborsHeuristic(neighborsIdAndDistance, newNode.id, l);
             // Add the new node per level and also attach the correct neighbors
             for (int i = 0; i < selected.size(); i++) {
                 neighbor = selected.get(i);
@@ -194,8 +198,22 @@ public class HNSWIndex {
                 neighbor = selected.get(i);
                 final IntegerList neighborsConnections = nodesById[neighbor].getNeighbors(l);
                 if (neighborsConnections.size() > M) {
+                    // Min Heap
+                    final PriorityQueue<IdAndDistance> neighborCandidatesPQ = new PriorityQueue<>(
+                            Comparator.comparingDouble(IdAndDistance::distance)
+                    );
+                    float[] neighborsVector = cloneAndGetVector(neighbor);
+                    for(int j = 0 ; j < neighborsConnections.size(); j++) {
+                        neighborCandidatesPQ.add(new IdAndDistance(neighborsConnections.get(j), dis(neighborsConnections.get(j), neighborsVector)));
+                    }
+
+                    IdAndDistance[] neighborsIdAndDistanceNew = new IdAndDistance[neighborsConnections.size()];
+                    for(int j = 0 ; j < neighborsConnections.size(); j++) {
+                        neighborsIdAndDistanceNew[j] = neighborCandidatesPQ.poll();
+                    }
+
                     // shrink the neighbors
-                    IntegerList shrinkedNeighborhood = shrinkNeighbors(neighbor, neighborsConnections, level);
+                    IntegerList shrinkedNeighborhood = selectNeighborsHeuristic(neighborsIdAndDistanceNew, neighbor, l);
                     nodesById[neighbor].updateNeighborhood(l, shrinkedNeighborhood);
                 }
 
@@ -207,42 +225,6 @@ public class HNSWIndex {
             entryPoint = newNode.id;
             maxLevel = level;
         }
-    }
-
-    private IntegerList shrinkNeighbors(int q, IntegerList candidates, int level) {
-        final IntegerList result = new IntegerList(M);
-        final IntegerList discardedCandidates = new IntegerList();
-        final PriorityQueue<IdAndDistance> candidatesQueue =
-                new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance));
-        for(int i = 0 ; i < candidates.size() ; i++) {
-            candidatesQueue.add(new IdAndDistance(candidates.get(i), q));
-        }
-
-        while(!candidatesQueue.isEmpty() && result.size() < M) {
-            // get the closest candidate from q.
-            IdAndDistance candidate = candidatesQueue.poll();
-            boolean add = true;
-            for(int i = 0 ; i < result.size() ; i++) {
-                if(candidate.distance() > dis(candidate.id(), result.get(i))) {
-                    add = false;
-                    break;
-                }
-            }
-
-            if(add) {
-                result.add(candidate.id());
-            } else {
-                discardedCandidates.add(candidate.id());
-            }
-
-        }
-        int counter = 0;
-        while(level == 0 && result.size() < M && discardedCandidates.size() > 0 && counter < discardedCandidates.size() ) {
-            result.add(discardedCandidates.get(counter));
-            counter++;
-        }
-        return result;
-
     }
 
     /**
@@ -264,7 +246,7 @@ public class HNSWIndex {
      * @param layer the layer number to search in
      * @return array of node IDs sorted by distance (closest first)
      */
-    private int[] searchLayer(float[] query, int entry, int ef, int layer) {
+    private IdAndDistance[] searchLayer(float[] query, int entry, int ef, int layer) {
         // Min Heap
         final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
                 Comparator.comparingDouble(IdAndDistance::distance)
@@ -312,11 +294,11 @@ public class HNSWIndex {
         }
 
         // reversing the result to ensure that closest neighbors are returned
-        int[] resultArray = new int[result.size()];
+        IdAndDistance[] resultArray = new IdAndDistance[result.size()];
         int i = result.size() - 1;
 
         while (!result.isEmpty()) {
-            resultArray[i] = result.poll().id();
+            resultArray[i] = result.poll();
             i--;
         }
 
@@ -340,29 +322,31 @@ public class HNSWIndex {
      * @param nodeToLinkNeighborsTo ID of the node being connected
      * @return list of selected neighbor IDs (size ≤ M)
      */
-    private IntegerList selectNeighborsHeuristic(int[] candidates, int nodeToLinkNeighborsTo, int level) {
+    private IntegerList selectNeighborsHeuristic(final IdAndDistance[] candidates, int nodeToLinkNeighborsTo,
+                                                 int level) {
         final IntegerList finalSelected = new IntegerList(M);
         final IntegerList discardedList = new IntegerList(M);
         int counter = 0;
         while (counter < candidates.length && finalSelected.size() < M) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
-            int candidate = candidates[counter];
+            final IdAndDistance candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
             int currentNeighbor;
+            float[] candidateVector = cloneAndGetVector(candidate.id());
             for(int i = 0; i < finalSelected.size(); i++) {
                 currentNeighbor = finalSelected.get(i);
                 // if the candidate is closer to an already selected neighbor than to the node we're linking to,
                 // then it's not diverse enough and should be rejected
-                if(dis(candidate, currentNeighbor) < dis(candidate, nodeToLinkNeighborsTo) ) {
+                if(dis(currentNeighbor, candidateVector) < candidate.distance() ) {
                     isDiverse = false;
                     break;
                 }
             }
             if(isDiverse) {
-                finalSelected.add(candidate);
+                finalSelected.add(candidate.id());
             } else {
-                discardedList.add(candidate);
+                discardedList.add(candidate.id());
             }
         }
 
@@ -376,17 +360,6 @@ public class HNSWIndex {
     }
 
     /**
-     * Calculates Euclidean distance between two nodes.
-     *
-     * @param a first node ID
-     * @param b second node ID
-     * @return squared Euclidean distance between the nodes
-     */
-    private double dis(int a, int b) {
-        return VectorUtils.euclideanDistance(idToVectorStorage.getVector(a), idToVectorStorage.getVector(b));
-    }
-
-    /**
      * Calculates Euclidean distance between a node and a query vector.
      *
      * @param id node ID
@@ -394,7 +367,9 @@ public class HNSWIndex {
      * @return squared Euclidean distance
      */
     private double dis(int id, float[] q) {
-            return VectorUtils.euclideanDistance(idToVectorStorage.getVector(id), q);
+        float[] tempVector = idToVectorStorage.getVector(id);
+        System.arraycopy(tempVector, 0, distanceVector, 0, tempVector.length);
+        return VectorUtils.euclideanDistance(distanceVector, q);
     }
 
     /**
@@ -421,14 +396,23 @@ public class HNSWIndex {
         int current = entryPoint;
         // Search all the top layers to find the entry point for the bottom layer.
         for (int l = maxLevel; l >= 1; l--) {
-            current = searchLayer(query, current, 1, l)[0];
+            current = searchLayer(query, current, 1, l)[0].id();
         }
         // Now Search on the bottom layer
-        final int[] results = searchLayer(query, current, ef_search, 0);
+        final IdAndDistance[] results = searchLayer(query, current, ef_search, 0);
         int finalSize = Math.min(k, results.length);
         int[] resultIds = new int[finalSize];
-        System.arraycopy(results, 0, resultIds, 0, finalSize);
+        for(int i = 0; i < finalSize; i++) {
+            resultIds[i] = results[i].id();
+        }
         return resultIds;
+    }
+
+    private float[] cloneAndGetVector(int id) {
+        float[] tempVector = idToVectorStorage.getVector(id);
+        float[] newVector = new float[tempVector.length];
+        System.arraycopy(tempVector, 0, newVector, 0, tempVector.length);
+        return  newVector;
     }
 
     /**
