@@ -1,6 +1,5 @@
 package org.navneev;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.navneev.utils.VectorUtils;
 
@@ -183,7 +182,7 @@ class HNSWIndexTest {
     void testIdenticalVectors() {
         float[] vector = {1.0f, 2.0f, 3.0f};
 
-        index = new HNSWIndex(vector.length, 1);
+        index = new HNSWIndex(vector.length, 3);
         
         // Add the same vector multiple times
         for (int i = 0; i < 3; i++) {

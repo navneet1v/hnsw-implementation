@@ -177,12 +177,12 @@ public class HNSWIndex {
 
         // Traverse from top layer to newNode's level
         for (int l = maxLevel; l > level; l--) {
-            current = searchLayer(vector, current, 1, l)[0];
+            current = searchLayer(vector, current, 1, l)[0].id();
         }
 
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
 
-            final int[] neighborsIds = searchLayer(vector, current, efConstruction, l);
+            final IdAndDistance[] neighborsIds = searchLayer(vector, current, efConstruction, l);
 
             final List<Integer> selected = selectNeighborsHeuristic(neighborsIds, newNode.id, l);
 
@@ -200,10 +200,10 @@ public class HNSWIndex {
                     for (int candidate : nodesById[neighbor].getNeighbors(l)) {
                         neighborCandidateQueue.add(new IdAndDistance(candidate, dis(candidate, neighborVector)));
                     }
-                    int[] intArray = new int[neighborCandidateQueue.size()];
+                    final IdAndDistance[] intArray = new IdAndDistance[neighborCandidateQueue.size()];
                     int counter = 0;
                     while (!neighborCandidateQueue.isEmpty()) {
-                        intArray[counter] = neighborCandidateQueue.poll().id();
+                        intArray[counter] = neighborCandidateQueue.poll();
                         counter++;
                     }
                     nodesById[neighbor].setNeighbors(l, selectNeighborsHeuristic(intArray, neighbor, l));
@@ -236,7 +236,7 @@ public class HNSWIndex {
      * @param layer the layer number to search in
      * @return array of node IDs sorted by distance (closest first)
      */
-    private int[] searchLayer(float[] query, Integer entry, int ef, int layer) {
+    private IdAndDistance[] searchLayer(float[] query, Integer entry, int ef, int layer) {
         // Min Heap
         final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
                 Comparator.comparingDouble(IdAndDistance::distance)
@@ -281,11 +281,11 @@ public class HNSWIndex {
             }
         }
 
-        int[] resultArray = new int[result.size()];
+        IdAndDistance[] resultArray = new IdAndDistance[result.size()];
         int i = result.size() - 1;
 
         while (!result.isEmpty()) {
-            resultArray[i] = result.poll().id();
+            resultArray[i] = result.poll();
             i--;
         }
 
@@ -309,27 +309,27 @@ public class HNSWIndex {
      * @param newNodeId ID of the node being connected
      * @return list of selected neighbor IDs (size ≤ M)
      */
-    private List<Integer> selectNeighborsHeuristic(int[] candidates, int newNodeId, int level) {
-        List<Integer> finalSelected = new ArrayList<>(M);
-        List<Integer> discardedIds = new ArrayList<>(M);
+    private List<Integer> selectNeighborsHeuristic(final IdAndDistance[] candidates, int newNodeId, int level) {
+        final List<Integer> finalSelected = new ArrayList<>(M);
+        final List<Integer> discardedIds = new ArrayList<>(M);
         int counter = 0;
-        float[] newNodeVector = idToVectorStorage.getVector(newNodeId);
-        while (counter< candidates.length && finalSelected.size() < M) {
+        while (counter < candidates.length && finalSelected.size() < M) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
-            int candidate = candidates[counter];
+            IdAndDistance candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
+            float[] candidateVector = idToVectorStorage.getVector(candidate.id());
             for(int currentNeighbor : finalSelected) {
                 // if the node which we are trying to add as a neighbor is closet to already connected neighbor then
                 // we should not add that node in neighbors list.
-                if(dis(currentNeighbor, candidate) < dis(candidate, newNodeVector) ) {
+                if(dis(currentNeighbor, candidateVector) < candidate.distance()) {
                     isDiverse = false;
                 }
             }
             if(isDiverse) {
-                finalSelected.add(candidate);
+                finalSelected.add(candidate.id());
             } else {
-                discardedIds.add(candidate);
+                discardedIds.add(candidate.id());
             }
         }
         counter = 0;
@@ -388,13 +388,15 @@ public class HNSWIndex {
         int current = entryPoint;
         // Search all the top layers to find the entry point for the bottom layer.
         for (int l = maxLevel; l >= 1; l--) {
-            current = searchLayer(query, current, 1, l)[0];
+            current = searchLayer(query, current, 1, l)[0].id();
         }
         // Now Search on the bottom layer
-        final int[] results = searchLayer(query, current, ef_search, 0);
+        final IdAndDistance[] results = searchLayer(query, current, ef_search, 0);
         int finalSize = Math.min(k, results.length);
         int[] resultIds = new int[finalSize];
-        System.arraycopy(results, 0, resultIds, 0, finalSize);
+        for(int i = 0 ; i < finalSize; i++) {
+            resultIds[i] = results[i].id();
+        }
         return resultIds;
     }
 
