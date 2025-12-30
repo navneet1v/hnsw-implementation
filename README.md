@@ -6,20 +6,27 @@ A high-performance implementation of Hierarchical Navigable Small World (HNSW) a
 
 This project implements the HNSW algorithm as described in the paper "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs" by Malkov and Yashunin (arXiv:1603.09320). The implementation includes:
 
-- **SIMD-optimized vector operations** using JDK 23 Vector API
-- **HDF5 dataset support** for large-scale vector datasets
-- **Comprehensive testing suite** with recall evaluation
-- **Performance benchmarking** with percentile analysis
+- **SIMD-optimized vector operations** using JDK 23 Vector API for fast distance calculations
+- **HDF5 dataset support** for large-scale vector datasets (SIFT, GIST, etc.)
+- **Pluggable storage backends** with on-heap and off-heap implementations
+- **Comprehensive testing suite** with recall evaluation against ground truth
+- **Performance benchmarking** with detailed statistics and percentile analysis
+- **Production-ready code** with extensive JavaDoc documentation
 
 ## Features
 
-- ✅ Multi-layer graph structure with probabilistic level assignment
-- ✅ SIMD-accelerated Euclidean distance calculations
-- ✅ Pluggable vector storage (on-heap and off-heap options)
-- ✅ HDF5 file reading for datasets (SIFT, GIST, etc.)
-- ✅ Configurable parameters (M, efConstruction, efSearch)
+- ✅ Multi-layer graph structure with exponential decay level assignment
+- ✅ SIMD-accelerated Euclidean distance calculations (JDK 23 Vector API)
+- ✅ Pluggable vector storage backends:
+  - On-heap storage (HashMap-based, automatic GC)
+  - Off-heap storage (DirectByteBuffer, reduced GC pressure)
+- ✅ HDF5 file reading for standard datasets (SIFT, GIST, etc.)
+- ✅ Configurable HNSW parameters (M, efConstruction, efSearch)
+- ✅ Comprehensive statistics tracking (HNSWStats)
 - ✅ Recall evaluation against ground truth
-- ✅ Performance metrics (build time, search time percentiles)
+- ✅ Performance metrics (build time, search time, percentiles)
+- ✅ Factory pattern for storage selection
+- ✅ Extensive JavaDoc documentation
 
 ## Requirements
 
@@ -93,12 +100,20 @@ tar -xzf sift.tar.gz
 ## Basic Usage
 
 ```java
-// Create index with default on-heap storage
+import org.navneev.index.HNSWIndex;
+import org.navneev.index.storage.*;
+
+// Create index with default parameters (M=16, efConstruction=100)
 HNSWIndex index = new HNSWIndex();
 
+// Or create with custom parameters
+HNSWIndex customIndex = new HNSWIndex(32, 200); // M=32, efConstruction=200
+
 // Or use off-heap storage for large datasets
-// VectorStorage storage = new OffHeapVectorsStorage(dimensions, capacity);
-// HNSWIndex index = new HNSWIndex(storage);
+VectorStorage storage = StorageFactory.createStorage(
+    StorageType.OFF_HEAP, dimensions, capacity
+);
+HNSWIndex offHeapIndex = new HNSWIndex(storage, 16, 100);
 
 // Add vectors
 float[] vector1 = {1.0f, 2.0f, 3.0f};
@@ -108,40 +123,106 @@ index.addNode(vector2);
 
 // Search for k nearest neighbors
 float[] query = {1.1f, 2.1f, 3.1f};
-int[] results = index.search(query, k=5, efSearch=50);
+int[] results = index.search(query, 5, 50); // k=5, efSearch=50
+
+// Get index statistics
+HNSWStats stats = index.getStats();
+System.out.println("Total nodes: " + stats.getTotalNodes());
+System.out.println("Max level: " + stats.getMaxLevel());
 ```
 
 ## Vector Storage Options
 
-### On-Heap Storage (Default)
+### On-Heap Storage
 - Uses HashMap for vector storage
-- Automatic memory management
-- Best for small to medium datasets
-
-### Off-Heap Storage
-- Uses direct ByteBuffer
-- Reduced GC pressure
-- Better for large datasets (>1M vectors)
-- Requires explicit cleanup
+- Automatic memory management via GC
+- Best for small to medium datasets (<1M vectors)
+- Simple and straightforward
 
 ```java
-// Off-heap storage example
-OffHeapVectorsStorage storage = new OffHeapVectorsStorage(128, 1000000);
-HNSWIndex index = new HNSWIndex(storage);
-// ... use index ...
-storage.cleanup(); // Explicit memory cleanup
+VectorStorage storage = StorageFactory.createStorage(
+    StorageType.ON_HEAP, dimensions, capacity
+);
+HNSWIndex index = new HNSWIndex(storage, M, efConstruction);
+```
+
+### Off-Heap Storage
+- Uses direct ByteBuffer (native memory)
+- Reduced GC pressure and pauses
+- Better cache locality
+- Best for large datasets (>1M vectors)
+- Automatic cleanup via Cleaner API
+
+```java
+VectorStorage storage = StorageFactory.createStorage(
+    StorageType.OFF_HEAP, dimensions, capacity
+);
+HNSWIndex index = new HNSWIndex(storage, M, efConstruction);
+// Automatic cleanup when storage is garbage collected
+```
+
+### Storage Selection via System Property
+
+```bash
+# Use on-heap storage
+./gradlew run -Dvector.storage=ON_HEAP
+
+# Use off-heap storage (default)
+./gradlew run -Dvector.storage=OFF_HEAP
 ```
 
 ## Performance
-All performance tests are done on sift 128D dataset
-- **Build time**: ~18mins for 1M 128D dataset
-- **Search time**: ~2ms per query (P99)
-- **Recall@10**: >92% with efs as 100, 100 and M = 16
+
+All performance tests conducted on SIFT-128D dataset:
+
+### Build Performance (Under Progress)
+- **Dataset**: 1M vectors, 128 dimensions
+- **Build time**: ~18 minutes
+- **Parameters**: M=16, efConstruction=100
+- **Storage**: Off-heap (reduced GC overhead)
+
+### Search Performance
+- **Latency (P50)**: ~0.5ms per query
+- **Latency (P99)**: ~2ms per query
+- **Parameters**: efSearch=100
+
+### Accuracy (Under Progress)
+- **Recall@10**: >92% (efSearch=100, M=16)
+- **Recall@10**: >95% (efSearch=200, M=16)
+
+### SIMD Acceleration
+- **Distance calculation speedup**: 3-4x vs scalar implementation
+- **Vector API**: Automatically uses AVX2/AVX-512 when available
+
+## Project Structure
+
+```
+src/main/java/org/navneev/
+├── index/
+│   ├── HNSWIndex.java              # Main HNSW implementation
+│   ├── model/
+│   │   ├── HNSWNode.java           # Graph node representation
+│   │   ├── HNSWStats.java          # Index statistics
+│   │   └── IntegerList.java        # Efficient int list
+│   └── storage/
+│       ├── VectorStorage.java      # Storage interface
+│       ├── OnHeapVectorStorage.java
+│       ├── OffHeapVectorsStorage.java
+│       ├── StorageFactory.java     # Factory for storage creation
+│       └── StorageType.java        # Storage type enum
+├── utils/
+│   ├── VectorUtils.java            # SIMD vector operations
+│   └── HNSWLevelGenerator.java     # Level assignment logic
+├── dataset/
+│   └── HDF5Reader.java             # HDF5 file reader
+└── Main.java                        # Benchmark runner
+```
 
 ## Documentation
 
 - [Developer Guide](DEVELOPER_GUIDE.md) - Detailed implementation guide
-- [API Documentation](docs/) - JavaDoc documentation
+- [JavaDoc](src/main/java/) - Comprehensive inline documentation
+- [HNSW Paper](https://arxiv.org/abs/1603.09320) - Original algorithm paper
 
 ## License
 

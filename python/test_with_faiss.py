@@ -1,5 +1,6 @@
 import numpy as np
 import faiss
+import time
 
 # Read vectors
 vectors = np.loadtxt('vectors.txt', delimiter=',').astype(np.float32)
@@ -22,8 +23,13 @@ index = faiss.IndexHNSWFlat(dimension, 16)
 index.hnsw.efConstruction = 100
 index.hnsw.efSearch = 100
 
-# Add vectors to index
-index.add(vectors)
+# Add vectors to index one by one
+start_time = time.time()
+for vector in vectors:
+    index.add(np.array([vector]))
+end_time = time.time()
+build_time_ms = (end_time - start_time) * 1000
+print(f"\nIndex build time: {build_time_ms:.2f} ms")
 
 # Search for top 10 nearest neighbors
 distances, indices = index.search(queries, k)

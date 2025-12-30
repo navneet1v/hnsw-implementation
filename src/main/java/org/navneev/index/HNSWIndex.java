@@ -8,7 +8,6 @@ import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.HNSWLevelGenerator;
 import org.navneev.utils.VectorUtils;
 
-import java.security.SecureRandom;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.PriorityQueue;
@@ -97,6 +96,8 @@ public class HNSWIndex {
 
     private final int dimensions;
 
+    private long totalBuildTimeInMillis;
+
     /**
      * Constructs a new HNSW index with default parameters.
      *
@@ -139,6 +140,7 @@ public class HNSWIndex {
      * @throws IllegalArgumentException if vector is null or empty
      */
     public void addNode(float[] vector) {
+        long startTime = System.currentTimeMillis();
         // max level, where level start from 0
         int level = levelGenerator.getRandomLevel();
         int nodeId = currentNodeId;
@@ -207,6 +209,7 @@ public class HNSWIndex {
             entryPoint = newNode.id;
             maxLevel = level;
         }
+        this.totalBuildTimeInMillis += System.currentTimeMillis() - startTime;
     }
 
     /**
@@ -396,9 +399,9 @@ public class HNSWIndex {
                 .efConstruction(efConstruction)
                 .totalNumberOfNodes(idToVectorStorage.getTotalNumberOfVectors())
                 .dimensions(dimensions)
-                .levels(maxLevel + 1)
                 .maxLevel(maxLevel)
                 .entryPoint(entryPoint)
+                .totalBuildTimeInMillis(totalBuildTimeInMillis)
                 .build();
     }
 
@@ -409,6 +412,46 @@ public class HNSWIndex {
         return  newVector;
     }
 
+    /**
+     * Returns the maximum number of connections allowed for a node at the specified layer.
+     *
+     * <p>The HNSW algorithm uses different connection limits for different layers:
+     * <ul>
+     *   <li><b>Layer 0 (base layer):</b> 2*M connections - allows denser connectivity for better recall</li>
+     *   <li><b>Upper layers (1, 2, ...):</b> M connections - sparser for faster navigation</li>
+     * </ul>
+     *
+     * <p><b>Why 2*M doesn't cause memory estimation problems:</b>
+     * <p>
+     * While layer 0 uses 2*M connections, memory estimation remains accurate because:
+     * <ol>
+     *   <li><b>All nodes exist in layer 0:</b> Every node in the graph appears in the base layer,
+     *       so the 2*M factor is consistently applied to all nodes at this level.</li>
+     *   <li><b>Upper layers have exponentially fewer nodes:</b> Due to the exponential decay
+     *       probability distribution (e.g., ~63% at L0, ~23% at L1, ~9% at L2), upper layers
+     *       contain significantly fewer nodes despite using M connections each.</li>
+     *   <li><b>Memory calculation accounts for both:</b> The formula considers:
+     *       <pre>
+     *       Memory ≈ N × (2*M × 4 bytes)           // Layer 0: all N nodes
+     *              + N × 0.37 × M × 4 bytes × avgLevels  // Upper layers: ~37% of nodes
+     *       </pre>
+     *       Where the layer 0 term (2*M) dominates but is predictable.</li>
+     *   <li><b>Bounded by design:</b> The selectNeighborsHeuristic ensures connections never
+     *       exceed getM(level), preventing unbounded growth.</li>
+     * </ol>
+     *
+     * <p><b>Example for 1M nodes, M=16:</b>
+     * <ul>
+     *   <li>Layer 0: 1,000,000 nodes × 32 connections × 4 bytes = 128 MB</li>
+     *   <li>Layer 1: ~370,000 nodes × 16 connections × 4 bytes = 23.7 MB</li>
+     *   <li>Layer 2: ~137,000 nodes × 16 connections × 4 bytes = 8.8 MB</li>
+     *   <li>Higher layers: diminishing contribution</li>
+     *   <li>Total: ~160 MB (predictable and bounded)</li>
+     * </ul>
+     *
+     * @param level the layer number (0 for base layer, 1+ for upper layers)
+     * @return 2*M for layer 0, M for upper layers
+     */
     private int getM(int level) {
         return level == 0 ? M * 2 : M;
     }

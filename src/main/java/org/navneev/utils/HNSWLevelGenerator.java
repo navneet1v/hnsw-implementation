@@ -25,6 +25,7 @@ public class HNSWLevelGenerator {
      */
     public HNSWLevelGenerator(int M) {
         this.random = new SecureRandom();
+        random.setSeed(12345);
         this.assignProbas = new ArrayList<>();
         setDefaultProbas((float) (1.0 / Math.log(M)));
     }
