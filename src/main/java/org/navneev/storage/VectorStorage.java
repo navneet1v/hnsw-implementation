@@ -58,7 +58,7 @@ public abstract class VectorStorage {
     @Getter
     protected final int totalNumberOfVectors;
 
-    private float[] vector;
+    //private float[] vector;
 
     /**
      * Constructs a vector storage with specified dimensions and capacity.
@@ -77,7 +77,7 @@ public abstract class VectorStorage {
     public VectorStorage(int dimensions, int totalNumberOfVectors) {
         this.dimensions = dimensions;
         this.totalNumberOfVectors = totalNumberOfVectors;
-        this.vector = new float[dimensions];
+        //this.vector = new float[dimensions];
     }
 
     /**
@@ -118,7 +118,7 @@ public abstract class VectorStorage {
      */
     public float[] getVector(int id) {
         checkBounds(id);
-        return getVectorImpl(id, vector);
+        return getVectorImpl(id, new float[dimensions]);
     }
 
     /**

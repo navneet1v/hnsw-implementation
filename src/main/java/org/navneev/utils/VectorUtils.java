@@ -58,7 +58,7 @@ public class VectorUtils {
      * 
      * @since JDK 23 (requires --add-modules jdk.incubator.vector)
      */
-    public static float euclideanDistance(float[] a, float[] b) {
+    public static double euclideanDistance(float[] a, float[] b) {
         // 1. Get vector length (how many floats can fit in one SIMD register)
         int vectorLength = SPECIES.length();
         // 2. Process arrays in chunks of vectorLength
@@ -82,7 +82,7 @@ public class VectorUtils {
         }
 
         // 4. Return sum
-        return (float)sum;
+        return sum;
     }
 
     /**

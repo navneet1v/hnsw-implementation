@@ -61,6 +61,11 @@ public class HNSWNode {
         return neighborsByLayer.getOrDefault(layer, new ArrayList<>());
     }
 
+    public void setNeighbors(int layer, List<Integer> neighbors) {
+        neighborsByLayer.put(layer, neighbors);
+    }
+
+
     /**
      * Adds a neighbor connection to this node at the specified layer.
      * 

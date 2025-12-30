@@ -289,9 +289,9 @@ class HNSWIndexTest {
         
         for (int q = 0; q < queries.length; q++) {
             // Calculate distances to all vectors
-            java.util.List<java.util.Map.Entry<Integer, Float>> distances = new java.util.ArrayList<>();
+            java.util.List<java.util.Map.Entry<Integer, Double>> distances = new java.util.ArrayList<>();
             for (int i = 0; i < vectors.length; i++) {
-                float distance = VectorUtils.euclideanDistance(vectors[i], queries[q]);
+                double distance = VectorUtils.euclideanDistance(vectors[i], queries[q]);
                 distances.add(new java.util.AbstractMap.SimpleEntry<>(i, distance));
             }
             
