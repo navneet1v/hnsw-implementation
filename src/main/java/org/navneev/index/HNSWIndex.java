@@ -3,6 +3,7 @@ package org.navneev.index;
 import org.navneev.index.model.HNSWNode;
 import org.navneev.index.model.HNSWStats;
 import org.navneev.index.model.IntegerList;
+import org.navneev.index.storage.OffHeapVectorsStorage;
 import org.navneev.index.storage.StorageFactory;
 import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.HNSWLevelGenerator;
@@ -91,12 +92,13 @@ public class HNSWIndex {
     /** Current NodeId in the graph */
     private int currentNodeId = 0;
 
-    /** Distance vector used for distance calculations */
-    private final float[] distanceVector;
-
     private final int dimensions;
 
     private long totalBuildTimeInMillis;
+
+    private final PriorityQueue<IdAndDistance> candidatesQueue;
+
+    private final PriorityQueue<IdAndDistance> resultQueue;
 
     /**
      * Constructs a new HNSW index with default parameters.
@@ -116,9 +118,10 @@ public class HNSWIndex {
         this.efConstruction = efConstruction;
         this.idToVectorStorage = StorageFactory.createStorage(dimensions, totalNumberOfVectors);
         this.nodesById = new HNSWNode[totalNumberOfVectors];
-        this.distanceVector = new float[dimensions];
         this.dimensions = dimensions;
         this.levelGenerator = new HNSWLevelGenerator(M);
+        candidatesQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance));
+        resultQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance).reversed());
     }
 
     /**
@@ -186,7 +189,7 @@ public class HNSWIndex {
                     final PriorityQueue<IdAndDistance> neighborCandidatesPQ = new PriorityQueue<>(
                             Comparator.comparingDouble(IdAndDistance::distance)
                     );
-                    float[] neighborsVector = cloneAndGetVector(neighbor);
+                    float[] neighborsVector = getVectorClonedIfNeeded(neighbor);
                     for(int j = 0 ; j < neighborsConnections.size(); j++) {
                         neighborCandidatesPQ.add(new IdAndDistance(neighborsConnections.get(j), dis(neighborsConnections.get(j), neighborsVector)));
                     }
@@ -232,25 +235,17 @@ public class HNSWIndex {
      * @return array of node IDs sorted by distance (closest first)
      */
     private IdAndDistance[] searchLayer(float[] query, int entry, int ef, int layer) {
-        // Min Heap
-        final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
-                Comparator.comparingDouble(IdAndDistance::distance)
-        );
-        // Max Heap
-        final PriorityQueue<IdAndDistance> result = new PriorityQueue<>(
-                Comparator.comparingDouble(IdAndDistance::distance).reversed()
-        );
 
         final BitSet visited = new BitSet(idToVectorStorage.getTotalNumberOfVectors());
         final double entryPointDistance = dis(entry, query);
 
-        candidates.add(new IdAndDistance(entry, entryPointDistance));
+        candidatesQueue.add(new IdAndDistance(entry, entryPointDistance));
         visited.set(entry);
-        result.add(new IdAndDistance(entry, entryPointDistance));
+        resultQueue.add(new IdAndDistance(entry, entryPointDistance));
 
-        while (!candidates.isEmpty()) {
-            IdAndDistance candidate = candidates.poll();
-            IdAndDistance farthestElementInResult = result.element();
+        while (!candidatesQueue.isEmpty()) {
+            IdAndDistance candidate = candidatesQueue.poll();
+            IdAndDistance farthestElementInResult = resultQueue.element();
             if(candidate.distance() > farthestElementInResult.distance()) {
                 // All elements in result is evaluated
                 break;
@@ -266,12 +261,12 @@ public class HNSWIndex {
 
                     // Main logic: if current neighbor is closer than the worst node present in the result, or result
                     // size is less than ef add the neighbor in final list.
-                    farthestElementInResult = result.element();
-                    if(neighborIdAndDistance.distance() < farthestElementInResult.distance() || result.size() < ef) {
-                        candidates.add(neighborIdAndDistance);
-                        result.add(new IdAndDistance(neighborId, neighborIdAndDistance.distance()));
-                        if(result.size() > ef) {
-                            result.poll();
+                    farthestElementInResult = resultQueue.element();
+                    if(neighborIdAndDistance.distance() < farthestElementInResult.distance() || resultQueue.size() < ef) {
+                        candidatesQueue.add(neighborIdAndDistance);
+                        resultQueue.add(new IdAndDistance(neighborId, neighborIdAndDistance.distance()));
+                        if(resultQueue.size() > ef) {
+                            resultQueue.poll();
                         }
                     }
                 }
@@ -279,13 +274,16 @@ public class HNSWIndex {
         }
 
         // reversing the result to ensure that closest neighbors are returned
-        IdAndDistance[] resultArray = new IdAndDistance[result.size()];
-        int i = result.size() - 1;
+        IdAndDistance[] resultArray = new IdAndDistance[resultQueue.size()];
+        int i = resultQueue.size() - 1;
 
-        while (!result.isEmpty()) {
-            resultArray[i] = result.poll();
+        while (!resultQueue.isEmpty()) {
+            resultArray[i] = resultQueue.poll();
             i--;
         }
+
+        candidatesQueue.clear();
+        resultQueue.clear();
 
         return resultArray;
     }
@@ -317,13 +315,13 @@ public class HNSWIndex {
             final IdAndDistance candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
-            int currentNeighbor;
-            float[] candidateVector = cloneAndGetVector(candidate.id());
+            int selectedNeighbor;
+            float[] candidateVector = getVectorClonedIfNeeded(candidate.id());
             for(int i = 0; i < finalSelected.size(); i++) {
-                currentNeighbor = finalSelected.get(i);
+                selectedNeighbor = finalSelected.get(i);
                 // if the candidate is closer to an already selected neighbor than to the node we're linking to,
                 // then it's not diverse enough and should be rejected
-                if(dis(currentNeighbor, candidateVector) < candidate.distance() ) {
+                if(dis(selectedNeighbor, candidateVector) < candidate.distance() ) {
                     isDiverse = false;
                     break;
                 }
@@ -353,8 +351,7 @@ public class HNSWIndex {
      */
     private double dis(int id, float[] q) {
         float[] tempVector = idToVectorStorage.getVector(id);
-        System.arraycopy(tempVector, 0, distanceVector, 0, tempVector.length);
-        return VectorUtils.euclideanDistance(distanceVector, q);
+        return VectorUtils.euclideanDistance(tempVector, q);
     }
 
     /**
@@ -405,11 +402,14 @@ public class HNSWIndex {
                 .build();
     }
 
-    private float[] cloneAndGetVector(int id) {
-        float[] tempVector = idToVectorStorage.getVector(id);
-        float[] newVector = new float[tempVector.length];
-        System.arraycopy(tempVector, 0, newVector, 0, tempVector.length);
-        return  newVector;
+    private float[] getVectorClonedIfNeeded(int id) {
+        if(idToVectorStorage instanceof OffHeapVectorsStorage) {
+            float[] tempVector = idToVectorStorage.getVector(id);
+            float[] newVector = new float[tempVector.length];
+            System.arraycopy(tempVector, 0, newVector, 0, tempVector.length);
+            return  newVector;
+        }
+        return idToVectorStorage.getVector(id);
     }
 
     /**
