@@ -222,9 +222,9 @@ public class HNSWIndex {
         final PriorityQueue<IdAndDistance> candidates = new PriorityQueue<>(
                 Comparator.comparingDouble(IdAndDistance::distance)
         );
-        // Min Heap
+        // Max Heap
         final PriorityQueue<IdAndDistance> result = new PriorityQueue<>(
-                Comparator.comparingDouble(IdAndDistance::distance)
+                Comparator.comparingDouble(IdAndDistance::distance).reversed()
         );
 
         final BitSet visited = new BitSet(idToVectorStorage.getTotalNumberOfVectors());
@@ -233,13 +233,12 @@ public class HNSWIndex {
         candidates.add(new IdAndDistance(entry, entryPointDistance));
         visited.set(entry);
         // negating distance to ensure that worst neighbor comes on top.
-        result.add(new IdAndDistance(entry, -entryPointDistance));
+        result.add(new IdAndDistance(entry, entryPointDistance));
 
         while (!candidates.isEmpty()) {
             IdAndDistance current = candidates.poll();
             IdAndDistance farthestElement = result.element();
-            float distanceFQ = farthestElement.distance() * -1;
-            if(current.distance() > distanceFQ) {
+            if(current.distance() > farthestElement.distance()) {
                 // All elements in result is evaluated
                 break;
             }
@@ -251,12 +250,13 @@ public class HNSWIndex {
 
                     // Main logic: if current neighbor is closer than the worst node present in the result, or result
                     // size is less than ef add the neighbor in final list. This logic is directly taken from the paper
-                    if(neighborIdAndDistance.distance() < distanceFQ || result.size() < ef) {
+                    if(neighborIdAndDistance.distance() < farthestElement.distance() || result.size() < ef) {
                         candidates.add(neighborIdAndDistance);
-                        result.add(new IdAndDistance(neighborId, -neighborIdAndDistance.distance()));
+                        result.add(new IdAndDistance(neighborId, neighborIdAndDistance.distance()));
                         while(result.size() > ef) {
                             result.poll();
                         }
+                        farthestElement = result.element();
                     }
                 }
             }
