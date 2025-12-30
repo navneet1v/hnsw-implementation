@@ -1,4 +1,4 @@
-package org.navneev.utils;
+package org.navneev.index;
 
 
 import java.security.SecureRandom;

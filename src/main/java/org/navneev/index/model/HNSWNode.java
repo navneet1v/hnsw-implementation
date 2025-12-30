@@ -23,7 +23,7 @@ public class HNSWNode {
     private final int highestNodeLevel;
     
     /** Map of layer number to list of neighbor node IDs for that layer */
-    private IntegerList[] neighborsByLayer;
+    private final IntegerList[] neighborsByLayer;
 
     /**
      * Constructs a new HNSW node with the specified ID and level.
@@ -39,8 +39,8 @@ public class HNSWNode {
         this.highestNodeLevel = highestNodeLevel;
         // since node level is 0-based index
         this.neighborsByLayer = new IntegerList[highestNodeLevel + 1];
-        // make 16 size integer list for the bottom layer as it is expected to have those many connections
-        neighborsByLayer[0] = new IntegerList(maxNeighbors + 1);
+        // make 2 * M size integer list for the bottom layer as it is expected to have those many connections
+        neighborsByLayer[0] = new IntegerList((2 * maxNeighbors) + 1);
         for (int l = 1; l <= this.highestNodeLevel; l++) {
             neighborsByLayer[l] = new IntegerList();
         }
