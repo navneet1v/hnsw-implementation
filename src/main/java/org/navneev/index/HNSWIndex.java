@@ -6,10 +6,10 @@ import org.navneev.index.storage.StorageFactory;
 import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.VectorUtils;
 
+import java.security.SecureRandom;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.PriorityQueue;
-import java.util.Random;
 
 /**
  * High-performance implementation of Hierarchical Navigable Small World (HNSW) algorithm
@@ -76,7 +76,7 @@ public class HNSWIndex {
     private final int efConstruction;
 
     /** Random number generator for level assignment */
-    private final Random random = new Random();
+    private final SecureRandom random = new SecureRandom();
 
     /** ID of the entry point node (highest level node) */
     private int entryPoint = -1;
@@ -184,6 +184,8 @@ public class HNSWIndex {
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
             // find the neighbors to be added
             final IdAndDistance[] neighborsIdAndDistance = searchLayer(vector, current, efConstruction, l);
+            // update the entry point which will be used as an entry for the next level
+            current = neighborsIdAndDistance[0].id();
             // select the final list of neighbors to be added.
             final IntegerList selected = selectNeighborsHeuristic(neighborsIdAndDistance, newNode.id, l);
             // Add the new node per level and also attach the correct neighbors
@@ -197,7 +199,7 @@ public class HNSWIndex {
             for (int i = 0; i < selected.size(); i++) {
                 neighbor = selected.get(i);
                 final IntegerList neighborsConnections = nodesById[neighbor].getNeighbors(l);
-                if (neighborsConnections.size() > M) {
+                if (neighborsConnections.size() > getM(l)) {
                     // Min Heap
                     final PriorityQueue<IdAndDistance> neighborCandidatesPQ = new PriorityQueue<>(
                             Comparator.comparingDouble(IdAndDistance::distance)
@@ -266,7 +268,7 @@ public class HNSWIndex {
         while (!candidates.isEmpty()) {
             IdAndDistance candidate = candidates.poll();
             IdAndDistance farthestElementInResult = result.element();
-            if(candidate.distance() > farthestElementInResult.distance() && candidate.id() != farthestElementInResult.id()) {
+            if(candidate.distance() > farthestElementInResult.distance()) {
                 // All elements in result is evaluated
                 break;
             }
@@ -324,10 +326,10 @@ public class HNSWIndex {
      */
     private IntegerList selectNeighborsHeuristic(final IdAndDistance[] candidates, int nodeToLinkNeighborsTo,
                                                  int level) {
-        final IntegerList finalSelected = new IntegerList(M);
-        final IntegerList discardedList = new IntegerList(M);
+        final IntegerList finalSelected = new IntegerList(getM(level));
+        final IntegerList discardedList = new IntegerList();
         int counter = 0;
-        while (counter < candidates.length && finalSelected.size() < M) {
+        while (counter < candidates.length && finalSelected.size() < getM(level)) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
             final IdAndDistance candidate = candidates[counter];
             counter++;
@@ -351,7 +353,7 @@ public class HNSWIndex {
         }
 
         counter = 0;
-        while(finalSelected.size() < M && level == 0 && counter < discardedList.size()) {
+        while(finalSelected.size() < getM(level) && counter < discardedList.size()) {
             finalSelected.add(discardedList.get(counter));
             counter++;
         }
@@ -413,6 +415,10 @@ public class HNSWIndex {
         float[] newVector = new float[tempVector.length];
         System.arraycopy(tempVector, 0, newVector, 0, tempVector.length);
         return  newVector;
+    }
+
+    private int getM(int level) {
+        return level == 0 ? M * 2 : M;
     }
 
     /**

@@ -263,7 +263,7 @@ class HNSWIndexTest {
         System.out.println("Searching for vector 0, got result: " + simpleResults[0]);
         
         // Lower threshold for debugging
-        assertTrue(recall > 0.1f, "Recall should be > 0.1, got: " + recall);
+        assertTrue(recall > 0.6f, "Recall should be > 0.6, got: " + recall);
     }
 
     @Test
