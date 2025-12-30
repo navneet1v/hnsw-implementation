@@ -1,6 +1,7 @@
 package org.navneev.index.storage;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
 /**
@@ -60,6 +61,9 @@ public class OffHeapVectorsStorage extends VectorStorage {
      * The memory is allocated outside the Java heap and will not be subject to garbage
      * collection until the buffer itself is no longer referenced.
      * 
+     * <p>The byte order is set to native order for optimal performance when interfacing
+     * with native code or SIMD operations.
+     * 
      * @param dimensions the number of dimensions in each vector (must be > 0)
      * @param totalNumberOfVectors the maximum number of vectors to store (must be > 0)
      * @throws IllegalArgumentException if dimensions or totalNumberOfVectors is <= 0
@@ -69,6 +73,7 @@ public class OffHeapVectorsStorage extends VectorStorage {
         super(dimensions, totalNumberOfVectors);
         int sizeInBytes = totalNumberOfVectors * dimensions * Float.BYTES;
         this.byteBuffer = ByteBuffer.allocateDirect(sizeInBytes);
+        this.byteBuffer.order(ByteOrder.nativeOrder()); // Set to native byte order
         this.floatBuffer = byteBuffer.asFloatBuffer();
     }
 

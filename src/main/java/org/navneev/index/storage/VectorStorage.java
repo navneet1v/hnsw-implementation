@@ -121,6 +121,11 @@ public abstract class VectorStorage {
         return getVectorImpl(id, vector);
     }
 
+    public void loadVectorInArray(int id, float[] vector) {
+        checkBounds(id);
+        getVectorImpl(id, vector);
+    }
+
     /**
      * Implementation-specific logic for retrieving a vector.
      * 

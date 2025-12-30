@@ -116,6 +116,10 @@ public class HNSWIndex {
 
     private final PriorityQueue<IdAndDistance> resultQueue;
 
+    private final BitSet visited;
+
+    private final float[] temporaryClonedVector;
+
     /**
      * Constructs a new HNSW index with default parameters.
      *
@@ -138,6 +142,8 @@ public class HNSWIndex {
         this.levelGenerator = new HNSWLevelGenerator(M);
         candidatesQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance));
         resultQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance).reversed());
+        visited = new BitSet(totalNumberOfVectors);
+        temporaryClonedVector = new float[dimensions];
     }
 
     /**
@@ -279,8 +285,6 @@ public class HNSWIndex {
      * @return array of node IDs sorted by distance (closest first)
      */
     private IdAndDistance[] searchLayer(float[] query, int entry, int ef, int layer) {
-
-        final BitSet visited = new BitSet(idToVectorStorage.getTotalNumberOfVectors());
         final double entryPointDistance = dis(entry, query);
 
         candidatesQueue.add(new IdAndDistance(entry, entryPointDistance));
@@ -328,6 +332,7 @@ public class HNSWIndex {
 
         candidatesQueue.clear();
         resultQueue.clear();
+        visited.clear();
 
         return resultArray;
     }
@@ -471,10 +476,10 @@ public class HNSWIndex {
 
     private float[] getVectorClonedIfNeeded(int id) {
         if (idToVectorStorage instanceof OffHeapVectorsStorage) {
-            float[] tempVector = idToVectorStorage.getVector(id);
-            float[] newVector = new float[tempVector.length];
-            System.arraycopy(tempVector, 0, newVector, 0, tempVector.length);
-            return newVector;
+            //float[] tempVector = idToVectorStorage.getVector(id);
+            //System.arraycopy(tempVector, 0, temporaryClonedVector, 0, tempVector.length);
+            idToVectorStorage.loadVectorInArray(id, temporaryClonedVector);
+            return temporaryClonedVector;
         }
         return idToVectorStorage.getVector(id);
     }

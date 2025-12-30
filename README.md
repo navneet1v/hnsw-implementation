@@ -175,20 +175,20 @@ HNSWIndex index = new HNSWIndex(storage, M, efConstruction);
 
 All performance tests conducted on SIFT-128D dataset:
 
-### Build Performance (Under Progress)
+### Build Performance
 - **Dataset**: 1M vectors, 128 dimensions
-- **Build time**: ~18 minutes
+- **Build time**: ~6.8 minutes
 - **Parameters**: M=16, efConstruction=100
 - **Storage**: Off-heap (reduced GC overhead)
+- **Shrink Algorithm**: Greedy Neighbors Shrink (Faster build times)
 
 ### Search Performance
 - **Latency (P50)**: ~0.5ms per query
-- **Latency (P99)**: ~2ms per query
+- **Latency (P99)**: ~1ms per query
 - **Parameters**: efSearch=100
 
-### Accuracy (Under Progress)
-- **Recall@10**: >92% (efSearch=100, M=16)
-- **Recall@10**: >95% (efSearch=200, M=16)
+### Accuracy
+- **Recall@100**: >87% (efSearch=100, M=16)
 
 ### SIMD Acceleration
 - **Distance calculation speedup**: 3-4x vs scalar implementation
