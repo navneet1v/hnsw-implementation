@@ -38,6 +38,9 @@ public class HNSWIndexUtils {
     /** Default value for greedy shrinking (enabled by default for performance) */
     private static final String DEFAULT_GREEDY_SHRINK = "true";
 
+    private static final boolean USE_GREEDY = Boolean.parseBoolean(System.getProperty(NEIGHBOR_SHRINK_STRATEGY,
+                                                         DEFAULT_GREEDY_SHRINK));
+
     /**
      * Determines whether to use greedy neighbor shrinking strategy.
      *
@@ -82,6 +85,6 @@ public class HNSWIndexUtils {
      * @return true if greedy shrinking should be used, false for heuristic-based shrinking
      */
     public static boolean useGreedyNeighborShrinkingStrategy() {
-        return Boolean.parseBoolean(System.getProperty(NEIGHBOR_SHRINK_STRATEGY, DEFAULT_GREEDY_SHRINK));
+        return USE_GREEDY;
     }
 }

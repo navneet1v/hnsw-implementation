@@ -1,5 +1,8 @@
 package org.navneev.index;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Setter;
 import org.navneev.index.distance.DistanceCalculator;
 import org.navneev.index.distance.DistanceCalculatorProvider;
 import org.navneev.index.model.HNSWNode;
@@ -9,6 +12,7 @@ import org.navneev.index.storage.StorageFactory;
 import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.HNSWIndexUtils;
 
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.PriorityQueue;
@@ -294,10 +298,10 @@ public class HNSWIndex {
             candidatesQueue.add(entryPointIdAndDistance);
             resultQueue.add(entryPointIdAndDistance);
             visited.set(entry);
-
+            IdAndDistance farthestElementInResult = resultQueue.element();
+            IdAndDistance candidate;
             while (!candidatesQueue.isEmpty()) {
-                final IdAndDistance candidate = candidatesQueue.poll();
-                IdAndDistance farthestElementInResult = resultQueue.element();
+                candidate = candidatesQueue.poll();
                 if (candidate.distance() > farthestElementInResult.distance()) {
                     // All elements in result is evaluated
                     break;
@@ -313,13 +317,15 @@ public class HNSWIndex {
 
                         // Main logic: if current neighbor is closer than the worst node present in the result, or result
                         // size is less than ef add the neighbor in final list.
-                        farthestElementInResult = resultQueue.element();
                         if (neighborIdAndDistance.distance() < farthestElementInResult.distance() || resultQueue.size() < ef) {
                             candidatesQueue.add(neighborIdAndDistance);
                             resultQueue.add(neighborIdAndDistance);
                             if (resultQueue.size() > ef) {
                                 resultQueue.poll();
                             }
+                            // since new object is added or removed in result queue, we should check now if we
+                            // the farthest element has changed
+                            farthestElementInResult = resultQueue.element();
                         }
                     }
                 }
@@ -393,30 +399,30 @@ public class HNSWIndex {
      */
     private IntegerList shrinkNeighbors(int nodeId, int newNodeId, int level) {
         IntegerList neighborsConnections = nodesById[nodeId].getNeighbors(level);
-        final PriorityQueue<IdAndDistance> neighborCandidatesPQ = new PriorityQueue<>(
-                neighborsConnections.size() + 1, Comparator.comparingDouble(IdAndDistance::distance)
-        );
-
         final DistanceCalculator neighborDistanceCalculator =
                 distanceCalculatorProvider.createDistanceCalculatorForVectorStorage(nodeId, dimensions);
-
-        for (int j = 0; j < neighborsConnections.size(); j++) {
-            neighborCandidatesPQ.add(new IdAndDistance(neighborsConnections.get(j), dis(neighborsConnections.get(j), neighborDistanceCalculator)));
-        }
         if (HNSWIndexUtils.useGreedyNeighborShrinkingStrategy()) {
-            for (int j = 0; j < getM(level) - 1; j++) {
-                neighborsConnections.update(j, neighborCandidatesPQ.poll().id());
-            }
-            // replace the farthest node with the new node which we are trying to add.
-            neighborsConnections.update(getM(level) - 1, newNodeId);
-        } else {
-            neighborCandidatesPQ.add(new IdAndDistance(newNodeId, dis(newNodeId, neighborDistanceCalculator)));
-            final IdAndDistance[] neighborsIdAndDistanceNew = new IdAndDistance[neighborsConnections.size()];
+            int fIndex = -1;
+            double fDis = Double.MIN_VALUE;
+
             for (int j = 0; j < neighborsConnections.size(); j++) {
-                neighborsIdAndDistanceNew[j] = neighborCandidatesPQ.poll();
+                double dis = dis(neighborsConnections.get(j), neighborDistanceCalculator);
+                if (dis > fDis) {
+                    fIndex = j;
+                    fDis = dis;
+                }
             }
+            neighborsConnections.update(fIndex, newNodeId);
+        } else {
+            final IdAndDistance[] neighborCandidates = new IdAndDistance[neighborsConnections.size() + 1];
+            neighborCandidates[0] = new IdAndDistance(newNodeId, dis(newNodeId, neighborDistanceCalculator));
+            for(int j = 0 ; j < neighborsConnections.size() ; j++) {
+                neighborCandidates[j + 1] = new IdAndDistance(neighborsConnections.get(j),
+                        dis(neighborsConnections.get(j), neighborDistanceCalculator));
+            }
+            Arrays.sort(neighborCandidates, Comparator.comparingDouble(IdAndDistance::distance));
             // Final shrunk neighbors list
-            neighborsConnections = selectNeighborsHeuristic(neighborsIdAndDistanceNew, nodeId, level);
+            neighborsConnections = selectNeighborsHeuristic(neighborCandidates, nodeId, level);
         }
 
         return neighborsConnections;

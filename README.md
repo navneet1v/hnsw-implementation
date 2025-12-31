@@ -184,11 +184,13 @@ All performance tests conducted on SIFT-128D dataset:
 
 ### Build Times with Different Approaches with 1M dataset
 - 18 mins with no neighbor pruning, using Integer and pretty bad code
-- 9 mins with neighbor pruning
+- 9 mins with neighbor pruning and removing all integers
 - 6.8 mins with native byte ordering 
 - 6.2 mins with Memory segment + FromArray for some vectors
 - 5.8 mins changing everything to use Memory segment
 - 6.08 mins with Memory Segment but adding few classes on top
+- 4.7 mins with improving the greedy strategy for shrinking neighbors by removing the Priority Queue 
+- XXX Bulk SIMD implementation for shrinking neighbors
 
 ### Search Performance
 - **Latency (P50)**: ~0.5ms per query
