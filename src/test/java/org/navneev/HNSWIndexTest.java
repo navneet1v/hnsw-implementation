@@ -2,7 +2,7 @@ package org.navneev;
 
 import org.junit.jupiter.api.Test;
 import org.navneev.index.HNSWIndex;
-import org.navneev.utils.VectorUtils;
+import org.navneev.utils.VectorDistanceCalculationUtils;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -328,7 +328,7 @@ class HNSWIndexTest {
             // Calculate distances to all vectors
             java.util.List<java.util.Map.Entry<Integer, Double>> distances = new java.util.ArrayList<>();
             for (int i = 0; i < vectors.length; i++) {
-                double distance = VectorUtils.euclideanDistance(vectors[i], queries[q]);
+                double distance = VectorDistanceCalculationUtils.euclideanDistance(vectors[i], queries[q]);
                 distances.add(new java.util.AbstractMap.SimpleEntry<>(i, distance));
             }
             

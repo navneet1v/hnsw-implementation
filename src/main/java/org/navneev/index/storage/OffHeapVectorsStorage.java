@@ -1,5 +1,6 @@
 package org.navneev.index.storage;
 
+import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -54,6 +55,8 @@ public class OffHeapVectorsStorage extends VectorStorage {
     /** Float view of the byte buffer for convenient float operations */
     private final FloatBuffer floatBuffer;
 
+    private final MemorySegment memorySegment;
+
     /**
      * Constructs an off-heap storage for vectors with specified dimensions and capacity.
      * 
@@ -75,6 +78,7 @@ public class OffHeapVectorsStorage extends VectorStorage {
         this.byteBuffer = ByteBuffer.allocateDirect(sizeInBytes);
         this.byteBuffer.order(ByteOrder.nativeOrder()); // Set to native byte order
         this.floatBuffer = byteBuffer.asFloatBuffer();
+        this.memorySegment = MemorySegment.ofBuffer(byteBuffer);
     }
 
     /**
@@ -86,7 +90,7 @@ public class OffHeapVectorsStorage extends VectorStorage {
      * @param id the vector ID (guaranteed to be in bounds by parent class)
      * @param vector the vector data to store (must have length equal to dimensions)
      */
-    public void addVectorImpl(int id, float[] vector) {
+    protected void addVectorImpl(int id, float[] vector) {
         floatBuffer.put(id * dimensions, vector, 0, dimensions);
     }
 
@@ -100,9 +104,13 @@ public class OffHeapVectorsStorage extends VectorStorage {
      * @param id the zero-based index of the vector to retrieve (guaranteed to be in bounds)
      * @return array containing the vector data (new array on each call)
      */
-    public float[] getVectorImpl(int id, float[] vector) {
+    protected float[] getVectorImpl(int id, float[] vector) {
         floatBuffer.get(id * dimensions, vector);
         return vector;
     }
 
+    protected MemorySegment getMemorySegmentImpl(int id) {
+        long offset = ((long) id) * dimensions * Float.BYTES;
+        return memorySegment.asSlice(offset, (long) dimensions * Float.BYTES);
+    }
 }

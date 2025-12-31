@@ -1,13 +1,13 @@
 package org.navneev.index;
 
+import org.navneev.index.distance.DistanceCalculator;
+import org.navneev.index.distance.DistanceCalculatorProvider;
 import org.navneev.index.model.HNSWNode;
 import org.navneev.index.model.HNSWStats;
 import org.navneev.index.model.IntegerList;
-import org.navneev.index.storage.OffHeapVectorsStorage;
 import org.navneev.index.storage.StorageFactory;
 import org.navneev.index.storage.VectorStorage;
 import org.navneev.utils.HNSWIndexUtils;
-import org.navneev.utils.VectorUtils;
 
 import java.util.BitSet;
 import java.util.Comparator;
@@ -118,7 +118,7 @@ public class HNSWIndex {
 
     private final BitSet visited;
 
-    private final float[] temporaryClonedVector;
+    private final DistanceCalculatorProvider distanceCalculatorProvider;
 
     /**
      * Constructs a new HNSW index with default parameters.
@@ -143,7 +143,7 @@ public class HNSWIndex {
         candidatesQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance));
         resultQueue = new PriorityQueue<>(Comparator.comparingDouble(IdAndDistance::distance).reversed());
         visited = new BitSet(totalNumberOfVectors);
-        temporaryClonedVector = new float[dimensions];
+        this.distanceCalculatorProvider = new DistanceCalculatorProvider(this.idToVectorStorage);
     }
 
     /**
@@ -181,16 +181,19 @@ public class HNSWIndex {
         }
 
         int current = entryPoint;
+        final DistanceCalculator newNodeBasedDistanceCalculator =
+                distanceCalculatorProvider.createDistanceCalculatorForVectorStorage(newNode.id, vector.length);
+
 
         // Traverse from top layer to newNode's level
         for (int l = maxLevel; l > level; l--) {
-            current = searchLayer(vector, current, 1, l)[0].id();
+            current = searchLayer(newNodeBasedDistanceCalculator, current, 1, l)[0].id();
         }
 
         int neighbor;
         for (int l = Math.min(level, maxLevel); l >= 0; l--) {
             // find the neighbors to be added
-            final IdAndDistance[] neighborsIdAndDistance = searchLayer(vector, current, efConstruction, l);
+            final IdAndDistance[] neighborsIdAndDistance = searchLayer(newNodeBasedDistanceCalculator, current, efConstruction, l);
             // update the entry point which will be used as an entry for the next level
             current = neighborsIdAndDistance[0].id();
             // select the final list of neighbors to be added.
@@ -200,7 +203,7 @@ public class HNSWIndex {
                 neighbor = selected.get(i);
                 // Create all the bidirectional links
                 newNode.addNeighbor(l, neighbor);
-                if (nodesById[neighbor].getNeighbors(l).size() < getM(l)) {
+                if (nodesById[neighbor].getNeighbors(l).size() + 1 <= getM(l)) {
                     nodesById[neighbor].addNeighbor(l, newNode.id);
                 } else {
                     nodesById[neighbor].updateNeighborhood(l, shrinkNeighbors(neighbor, newNode.id, l));
@@ -238,13 +241,14 @@ public class HNSWIndex {
      * @throws IllegalArgumentException if k ≤ 0 or efSearch < k
      */
     public int[] search(float[] query, int k, int ef_search) {
+        final DistanceCalculator queryDistanceCalculator = distanceCalculatorProvider.createDistanceCalculator(query);
         int current = entryPoint;
         // Search all the top layers to find the entry point for the bottom layer.
         for (int l = maxLevel; l >= 1; l--) {
-            current = searchLayer(query, current, 1, l)[0].id();
+            current = searchLayer(queryDistanceCalculator, current, 1, l)[0].id();
         }
         // Now Search on the bottom layer
-        final IdAndDistance[] results = searchLayer(query, current, ef_search, 0);
+        final IdAndDistance[] results = searchLayer(queryDistanceCalculator, current, ef_search, 0);
         int finalSize = Math.min(k, results.length);
         int[] resultIds = new int[finalSize];
         for (int i = 0; i < finalSize; i++) {
@@ -278,62 +282,69 @@ public class HNSWIndex {
      * <p>The search terminates when no more promising candidates remain or
      * when the current candidate is farther than the worst result.
      *
-     * @param query the query vector to search for
-     * @param entry the entry point node ID for this layer
-     * @param ef    the maximum number of candidates to maintain
-     * @param layer the layer number to search in
+     * @param distanceCalculator the query vector to search for
+     * @param entry              the entry point node ID for this layer
+     * @param ef                 the maximum number of candidates to maintain
+     * @param layer              the layer number to search in
      * @return array of node IDs sorted by distance (closest first)
      */
-    private IdAndDistance[] searchLayer(float[] query, int entry, int ef, int layer) {
-        final double entryPointDistance = dis(entry, query);
+    private IdAndDistance[] searchLayer(final DistanceCalculator distanceCalculator, int entry, int ef, int layer) {
+        try {
+            final IdAndDistance entryPointIdAndDistance = new IdAndDistance(entry, dis(entry, distanceCalculator));
+            candidatesQueue.add(entryPointIdAndDistance);
+            resultQueue.add(entryPointIdAndDistance);
+            visited.set(entry);
 
-        candidatesQueue.add(new IdAndDistance(entry, entryPointDistance));
-        visited.set(entry);
-        resultQueue.add(new IdAndDistance(entry, entryPointDistance));
+            while (!candidatesQueue.isEmpty()) {
+                final IdAndDistance candidate = candidatesQueue.poll();
+                IdAndDistance farthestElementInResult = resultQueue.element();
+                if (candidate.distance() > farthestElementInResult.distance()) {
+                    // All elements in result is evaluated
+                    break;
+                }
 
-        while (!candidatesQueue.isEmpty()) {
-            IdAndDistance candidate = candidatesQueue.poll();
-            IdAndDistance farthestElementInResult = resultQueue.element();
-            if (candidate.distance() > farthestElementInResult.distance()) {
-                // All elements in result is evaluated
-                break;
-            }
+                final IntegerList neighborsList = nodesById[candidate.id()].getNeighbors(layer);
+                int neighborId;
+                for (int i = 0; i < neighborsList.size(); i++) {
+                    neighborId = neighborsList.get(i);
+                    if (!visited.get(neighborId)) {
+                        visited.set(neighborId);
+                        final IdAndDistance neighborIdAndDistance = new IdAndDistance(neighborId, dis(neighborId, distanceCalculator));
 
-            final IntegerList neighborsList = nodesById[candidate.id()].getNeighbors(layer);
-            int neighborId;
-            for (int i = 0; i < neighborsList.size(); i++) {
-                neighborId = neighborsList.get(i);
-                if (!visited.get(neighborId)) {
-                    visited.set(neighborId);
-                    final IdAndDistance neighborIdAndDistance = new IdAndDistance(neighborId, dis(neighborId, query));
-
-                    // Main logic: if current neighbor is closer than the worst node present in the result, or result
-                    // size is less than ef add the neighbor in final list.
-                    farthestElementInResult = resultQueue.element();
-                    if (neighborIdAndDistance.distance() < farthestElementInResult.distance() || resultQueue.size() < ef) {
-                        candidatesQueue.add(neighborIdAndDistance);
-                        resultQueue.add(new IdAndDistance(neighborId, neighborIdAndDistance.distance()));
-                        if (resultQueue.size() > ef) {
-                            resultQueue.poll();
+                        // Main logic: if current neighbor is closer than the worst node present in the result, or result
+                        // size is less than ef add the neighbor in final list.
+                        farthestElementInResult = resultQueue.element();
+                        if (neighborIdAndDistance.distance() < farthestElementInResult.distance() || resultQueue.size() < ef) {
+                            candidatesQueue.add(neighborIdAndDistance);
+                            resultQueue.add(neighborIdAndDistance);
+                            if (resultQueue.size() > ef) {
+                                resultQueue.poll();
+                            }
                         }
                     }
                 }
             }
+            return buildResultArray();
+        } finally {
+            clear();
         }
+    }
 
+    private void clear() {
+        candidatesQueue.clear();
+        resultQueue.clear();
+        visited.clear();
+    }
+
+    private IdAndDistance[] buildResultArray() {
         // reversing the result to ensure that closest neighbors are returned
-        IdAndDistance[] resultArray = new IdAndDistance[resultQueue.size()];
+        final IdAndDistance[] resultArray = new IdAndDistance[resultQueue.size()];
         int i = resultQueue.size() - 1;
 
         while (!resultQueue.isEmpty()) {
             resultArray[i] = resultQueue.poll();
             i--;
         }
-
-        candidatesQueue.clear();
-        resultQueue.clear();
-        visited.clear();
-
         return resultArray;
     }
 
@@ -370,24 +381,27 @@ public class HNSWIndex {
      * <pre>
      * Node B has neighbors: [1, 2, 3, 4, 5] (M=4, but has 5)
      * New node A wants to connect to B
-     * 
+     *
      * Greedy: Keep 3 closest + A → [1, 2, 3, A]
      * Heuristic: Select diverse set → [1, 3, 5, A] (maintains diversity)
      * </pre>
      *
-     * @param nodeId the node whose neighbors need to be pruned
+     * @param nodeId    the node whose neighbors need to be pruned
      * @param newNodeId the new node being added to the neighbor list
-     * @param level the layer at which to shrink neighbors
+     * @param level     the layer at which to shrink neighbors
      * @return pruned list of neighbor IDs with size ≤ getM(level)
      */
     private IntegerList shrinkNeighbors(int nodeId, int newNodeId, int level) {
         IntegerList neighborsConnections = nodesById[nodeId].getNeighbors(level);
         final PriorityQueue<IdAndDistance> neighborCandidatesPQ = new PriorityQueue<>(
-                Comparator.comparingDouble(IdAndDistance::distance)
+                neighborsConnections.size() + 1, Comparator.comparingDouble(IdAndDistance::distance)
         );
-        float[] neighborVector = getVectorClonedIfNeeded(nodeId);
+
+        final DistanceCalculator neighborDistanceCalculator =
+                distanceCalculatorProvider.createDistanceCalculatorForVectorStorage(nodeId, dimensions);
+
         for (int j = 0; j < neighborsConnections.size(); j++) {
-            neighborCandidatesPQ.add(new IdAndDistance(neighborsConnections.get(j), dis(neighborsConnections.get(j), neighborVector)));
+            neighborCandidatesPQ.add(new IdAndDistance(neighborsConnections.get(j), dis(neighborsConnections.get(j), neighborDistanceCalculator)));
         }
         if (HNSWIndexUtils.useGreedyNeighborShrinkingStrategy()) {
             for (int j = 0; j < getM(level) - 1; j++) {
@@ -396,8 +410,8 @@ public class HNSWIndex {
             // replace the farthest node with the new node which we are trying to add.
             neighborsConnections.update(getM(level) - 1, newNodeId);
         } else {
-            neighborCandidatesPQ.add(new IdAndDistance(newNodeId, dis(newNodeId, neighborVector)));
-            IdAndDistance[] neighborsIdAndDistanceNew = new IdAndDistance[neighborsConnections.size()];
+            neighborCandidatesPQ.add(new IdAndDistance(newNodeId, dis(newNodeId, neighborDistanceCalculator)));
+            final IdAndDistance[] neighborsIdAndDistanceNew = new IdAndDistance[neighborsConnections.size()];
             for (int j = 0; j < neighborsConnections.size(); j++) {
                 neighborsIdAndDistanceNew[j] = neighborCandidatesPQ.poll();
             }
@@ -427,21 +441,29 @@ public class HNSWIndex {
      */
     private IntegerList selectNeighborsHeuristic(final IdAndDistance[] candidates, int nodeToLinkNeighborsTo,
                                                  int level) {
-        final IntegerList finalSelected = new IntegerList(getM(level));
-        final IntegerList discardedList = new IntegerList();
+        final int currentM = getM(level);
+        final IntegerList finalSelected = new IntegerList(currentM);
+        final IntegerList discardedList = new IntegerList(candidates.length);
         int counter = 0;
-        while (counter < candidates.length && finalSelected.size() < getM(level)) {
+        DistanceCalculator candidateBasedDistanceCalculator = null;
+        while (counter < candidates.length && finalSelected.size() < currentM) {
             // Let's apply the heuristic to select the diverse nodes for HNSW
             final IdAndDistance candidate = candidates[counter];
             counter++;
             boolean isDiverse = true;
             int selectedNeighbor;
-            float[] candidateVector = getVectorClonedIfNeeded(candidate.id());
+            if (candidateBasedDistanceCalculator == null) {
+                candidateBasedDistanceCalculator =
+                        distanceCalculatorProvider.createDistanceCalculatorForVectorStorage(candidate.id(), dimensions);
+            } else {
+                distanceCalculatorProvider.updateDistanceCalculator(candidateBasedDistanceCalculator, candidate.id(),
+                        dimensions);
+            }
             for (int i = 0; i < finalSelected.size(); i++) {
                 selectedNeighbor = finalSelected.get(i);
                 // if the candidate is closer to an already selected neighbor than to the node we're linking to,
                 // then it's not diverse enough and should be rejected
-                if (dis(selectedNeighbor, candidateVector) < candidate.distance()) {
+                if (dis(selectedNeighbor, candidateBasedDistanceCalculator) < candidate.distance()) {
                     isDiverse = false;
                     break;
                 }
@@ -454,7 +476,7 @@ public class HNSWIndex {
         }
 
         counter = 0;
-        while (finalSelected.size() < getM(level) && counter < discardedList.size()) {
+        while (finalSelected.size() < currentM && counter < discardedList.size()) {
             finalSelected.add(discardedList.get(counter));
             counter++;
         }
@@ -462,26 +484,8 @@ public class HNSWIndex {
         return finalSelected;
     }
 
-    /**
-     * Calculates Euclidean distance between a node and a query vector.
-     *
-     * @param id node ID
-     * @param q  query vector
-     * @return squared Euclidean distance
-     */
-    private double dis(int id, float[] q) {
-        float[] tempVector = idToVectorStorage.getVector(id);
-        return VectorUtils.euclideanDistance(tempVector, q);
-    }
-
-    private float[] getVectorClonedIfNeeded(int id) {
-        if (idToVectorStorage instanceof OffHeapVectorsStorage) {
-            //float[] tempVector = idToVectorStorage.getVector(id);
-            //System.arraycopy(tempVector, 0, temporaryClonedVector, 0, tempVector.length);
-            idToVectorStorage.loadVectorInArray(id, temporaryClonedVector);
-            return temporaryClonedVector;
-        }
-        return idToVectorStorage.getVector(id);
+    private double dis(int id, final DistanceCalculator calculator) {
+        return this.distanceCalculatorProvider.calculateDistanceFromId(calculator, id);
     }
 
     /**
