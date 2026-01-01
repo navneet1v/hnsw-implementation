@@ -234,7 +234,7 @@ public class DistanceCalculatorProvider {
      * @param vectorId           the ID of the second vector in storage
      * @return the Euclidean distance between the two vectors
      */
-    public double calculateDistanceFromId(DistanceCalculator distanceCalculator, int vectorId) {
+    public float calculateDistanceFromId(DistanceCalculator distanceCalculator, int vectorId) {
         if (useMemorySegment) {
             return distanceCalculator.calculate(vectorStorage.getMemorySegment(vectorId));
         } else {

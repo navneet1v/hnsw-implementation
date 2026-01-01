@@ -1,8 +1,5 @@
 package org.navneev.index;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.Setter;
 import org.navneev.index.distance.DistanceCalculator;
 import org.navneev.index.distance.DistanceCalculatorProvider;
 import org.navneev.index.model.HNSWNode;
@@ -403,10 +400,10 @@ public class HNSWIndex {
                 distanceCalculatorProvider.createDistanceCalculatorForVectorStorage(nodeId, dimensions);
         if (HNSWIndexUtils.useGreedyNeighborShrinkingStrategy()) {
             int fIndex = -1;
-            double fDis = Double.MIN_VALUE;
+            float fDis = Float.MIN_VALUE;
 
             for (int j = 0; j < neighborsConnections.size(); j++) {
-                double dis = dis(neighborsConnections.get(j), neighborDistanceCalculator);
+                float dis = dis(neighborsConnections.get(j), neighborDistanceCalculator);
                 if (dis > fDis) {
                     fIndex = j;
                     fDis = dis;
@@ -490,7 +487,7 @@ public class HNSWIndex {
         return finalSelected;
     }
 
-    private double dis(int id, final DistanceCalculator calculator) {
+    private float dis(int id, final DistanceCalculator calculator) {
         return this.distanceCalculatorProvider.calculateDistanceFromId(calculator, id);
     }
 
@@ -545,6 +542,6 @@ public class HNSWIndex {
      * @param id       the node identifier
      * @param distance the distance from query (squared Euclidean distance)
      */
-    record IdAndDistance(int id, double distance) {
+    record IdAndDistance(int id, float distance) {
     }
 }

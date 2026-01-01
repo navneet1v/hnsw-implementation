@@ -60,12 +60,12 @@ public class VectorDistanceCalculationUtils {
      * @throws NullPointerException     if either array is null
      * @since JDK 23 (requires --add-modules jdk.incubator.vector)
      */
-    public static double euclideanDistance(float[] a, float[] b) {
+    public static float euclideanDistance(float[] a, float[] b) {
         // 1. Get vector length (how many floats can fit in one SIMD register)
         int vectorLength = SPECIES.length();
         // 2. Process arrays in chunks of vectorLength
         int loopBound = SPECIES.loopBound(a.length);
-        double sum = 0;
+        float sum = 0;
 
         for (int i = 0; i < loopBound; i += vectorLength) {
             FloatVector va = FloatVector.fromArray(SPECIES, a, i);
@@ -79,7 +79,7 @@ public class VectorDistanceCalculationUtils {
 
         // 3. Handle remaining elements with scalar code
         for (int i = loopBound; i < a.length; i++) {
-            double diff = a[i] - b[i];
+            float diff = a[i] - b[i];
             sum += diff * diff;
         }
 
@@ -118,10 +118,10 @@ public class VectorDistanceCalculationUtils {
      * @throws NullPointerException      if either segment is null
      * @since JDK 23 (requires --add-modules jdk.incubator.vector)
      */
-    public static double euclideanDistance(final MemorySegment a, final MemorySegment b, int length) {
+    public static float euclideanDistance(final MemorySegment a, final MemorySegment b, int length) {
         int vectorLength = SPECIES.length();
         int loopBound = SPECIES.loopBound(length);
-        double sum = 0;
+        float sum = 0;
 
         // SIMD loop - process vectorLength floats at a time
         for (long i = 0; i < loopBound; i += vectorLength) {
@@ -136,7 +136,7 @@ public class VectorDistanceCalculationUtils {
         for (long i = loopBound; i < length; i++) {
             float aVal = a.get(java.lang.foreign.ValueLayout.JAVA_FLOAT, i * Float.BYTES);
             float bVal = b.get(java.lang.foreign.ValueLayout.JAVA_FLOAT, i * Float.BYTES);
-            double diff = aVal - bVal;
+            float diff = aVal - bVal;
             sum += diff * diff;
         }
 
@@ -172,10 +172,10 @@ public class VectorDistanceCalculationUtils {
      * @throws NullPointerException      if segment or array is null
      * @since JDK 23 (requires --add-modules jdk.incubator.vector)
      */
-    public static double euclideanDistance(final MemorySegment a, float[] b) {
+    public static float euclideanDistance(final MemorySegment a, float[] b) {
         int vectorLength = SPECIES.length();
         int loopBound = SPECIES.loopBound(b.length);
-        double sum = 0;
+        float sum = 0;
 
         // SIMD loop
         for (long i = 0; i < loopBound; i += vectorLength) {
@@ -189,7 +189,7 @@ public class VectorDistanceCalculationUtils {
         // Handle remainder - scalar loop
         for (int i = loopBound; i < b.length; i++) {
             float aVal = a.get(java.lang.foreign.ValueLayout.JAVA_FLOAT, (long) i * Float.BYTES);
-            double diff = aVal - b[i];
+            float diff = aVal - b[i];
             sum += diff * diff;
         }
 
@@ -219,7 +219,7 @@ public class VectorDistanceCalculationUtils {
 
         // 2. Process arrays in chunks of SIMD length
         int loopBound = SPECIES.loopBound(a.length);
-        double sum = 0;
+        float sum = 0;
 
         // 3. Rum the loop to do inner product
         for (int i = 0; i < loopBound; i += vectorLength) {

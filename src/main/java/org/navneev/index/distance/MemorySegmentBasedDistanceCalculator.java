@@ -126,7 +126,7 @@ public class MemorySegmentBasedDistanceCalculator implements DistanceCalculator 
      * @throws NullPointerException      if memorySegment is null
      */
     @Override
-    public double calculate(final MemorySegment memorySegment) {
+    public float calculate(final MemorySegment memorySegment) {
         return VectorDistanceCalculationUtils.euclideanDistance(baseMemorySegment, memorySegment, length);
     }
 
@@ -146,7 +146,7 @@ public class MemorySegmentBasedDistanceCalculator implements DistanceCalculator 
      * @throws NullPointerException     if vector2 is null
      */
     @Override
-    public double calculate(float[] vector2) {
+    public float calculate(float[] vector2) {
         return VectorDistanceCalculationUtils.euclideanDistance(baseMemorySegment, vector2);
     }
 

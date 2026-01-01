@@ -69,7 +69,7 @@ public interface DistanceCalculator {
      * @throws IndexOutOfBoundsException if segment size doesn't match reference vector dimensions
      * @throws NullPointerException      if memorySegment is null
      */
-    double calculate(final MemorySegment memorySegment);
+    float calculate(final MemorySegment memorySegment);
 
     /**
      * Calculates the squared Euclidean distance between the reference vector and a float array.
@@ -85,7 +85,7 @@ public interface DistanceCalculator {
      * @throws IllegalArgumentException if array length doesn't match reference vector dimensions
      * @throws NullPointerException     if vector2 is null
      */
-    double calculate(final float[] vector2);
+    float calculate(final float[] vector2);
 
     /**
      * Updates the reference vector to a new vector stored in a MemorySegment.
