@@ -189,7 +189,9 @@ All performance tests conducted on SIFT-128D dataset:
 - 6.2 mins with Memory segment + FromArray for some vectors
 - 5.8 mins changing everything to use Memory segment
 - 6.08 mins with Memory Segment but adding few classes on top
-- 4.7 mins with improving the greedy strategy for shrinking neighbors by removing the Priority Queue 
+- 4.7 mins with improving the greedy strategy for shrinking neighbors by removing the Priority Queue
+- 5.6 mins when we are caching the FloatVectorArray for commonly used elements, reason being there is not enough 
+  distance calculation happening that can justify the overhead of caching the FloatVector as an array
 - XXX Bulk SIMD implementation for shrinking neighbors
 
 ### Search Performance
