@@ -1,6 +1,6 @@
 # HNSW Implementation in Java
 
-A high-performance implementation of Hierarchical Navigable Small World (HNSW) algorithm for approximate nearest neighbor search, featuring SIMD optimization and HDF5 dataset support.
+An attempt on the implementation of Hierarchical Navigable Small World (HNSW) algorithm for approximate nearest neighbor search, featuring SIMD optimization and HDF5 dataset support.
 
 ## Overview
 
