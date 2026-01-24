@@ -109,10 +109,25 @@ void distance_simd_batch8(const float* a, const float* b0, const float* b1, cons
 }
 #endif
 
-int main() {
+int main(int argc, char* argv[]) {
     const int dims[] = {768, 1536, 3072, 4096};
-    const int num_vectors = 1000000;
+    const int num_vectors = 100000;
     const int num_queries = 10000;
+
+    bool use_bulk = true; // default to bulk SIMD
+    if (argc > 1) {
+        std::string arg = argv[1];
+        if (arg == "--simd" || arg == "-s") {
+            use_bulk = false;
+        } else if (arg == "--bulk-simd" || arg == "-bs") {
+            use_bulk = true;
+        } else {
+            std::cout << "Usage: " << argv[0] << " [--simd|-s | --bulk|-b]" << std::endl;
+            std::cout << "  --simd, -s: Use regular SIMD (one vector at a time)" << std::endl;
+            std::cout << "  --bulk-simd, -bs: Use bulk SIMD (8 vectors at a time, default)" << std::endl;
+            return 1;
+        }
+    }
 
     if (num_vectors % 8 != 0) {
         std::cout << "Error: num_vectors must be divisible by 8" << std::endl;
@@ -120,10 +135,11 @@ int main() {
     }
 
 #ifdef __AVX512F__
-    std::cout << "Using AVX512" << std::endl;
+    std::cout << "Using AVX512";
 #else
-    std::cout << "Using AVX2" << std::endl;
+    std::cout << "Using AVX2";
 #endif
+    std::cout << " with " << (use_bulk ? "bulk SIMD (8 vectors)" : "regular SIMD (1 vector)") << std::endl;
 
     for (int dim : dims) {
         {
@@ -134,14 +150,24 @@ int main() {
             for (int i = 0; i < num_queries * dim; ++i) queries[i] = static_cast<float>(rand()) / RAND_MAX;
 
             auto start = std::chrono::high_resolution_clock::now();
-            float results[8];
-            for (int q = 0; q < num_queries; ++q) {
-                for (int v = 0; v < num_vectors; v += 8) {
-                    distance_simd_batch8(&queries[q * dim], &vectors[v * dim], &vectors[(v+1) * dim],
-                                        &vectors[(v+2) * dim], &vectors[(v+3) * dim], &vectors[(v+4) * dim],
-                                        &vectors[(v+5) * dim], &vectors[(v+6) * dim], &vectors[(v+7) * dim], dim, results);
+            
+            if (use_bulk) {
+                float results[8];
+                for (int q = 0; q < num_queries; ++q) {
+                    for (int v = 0; v < num_vectors; v += 8) {
+                        distance_simd_batch8(&queries[q * dim], &vectors[v * dim], &vectors[(v+1) * dim],
+                                            &vectors[(v+2) * dim], &vectors[(v+3) * dim], &vectors[(v+4) * dim],
+                                            &vectors[(v+5) * dim], &vectors[(v+6) * dim], &vectors[(v+7) * dim], dim, results);
+                    }
+                }
+            } else {
+                for (int q = 0; q < num_queries; ++q) {
+                    for (int v = 0; v < num_vectors; ++v) {
+                        float result = distance_simd(&queries[q * dim], &vectors[v * dim], dim);
+                    }
                 }
             }
+            
             auto end = std::chrono::high_resolution_clock::now();
 
             std::cout << "Dim " << dim << " (" << num_queries << " queries x " << num_vectors << " vectors): "

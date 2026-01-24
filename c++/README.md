@@ -62,11 +62,26 @@ Or manually:
 ```bash
 # AVX2
 g++ -O3 -mavx2 -mfma -o main_avx2 main.cpp
-./main_avx2
+./main_avx2 [--simd|-s | --bulk-simd|-bs]
 
 # AVX512
 g++ -O3 -mavx512f -o main_avx512 main.cpp
-./main_avx512
+./main_avx512 [--simd|-s | --bulk-simd|-bs]
+```
+
+### Command Line Options
+
+- `--simd` or `-s`: Use regular SIMD (one vector at a time)
+- `--bulk-simd` or `-bs`: Use bulk SIMD (8 vectors at a time, default)
+
+**Examples:**
+```bash
+# Run with regular SIMD
+./main_avx2 --simd
+
+# Run with bulk SIMD (default)
+./main_avx2 --bulk-simd
+./main_avx2  # same as above
 ```
 
 ### What is -O3 doing?
